@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  meowdel-web:
+    build:
+      context: ./web-app
+      dockerfile: Dockerfile
+    container_name: meowdel-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./web-app/.env
+    environment:
+      # Node Environment
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+
+      # Site Configuration
+      - NEXT_PUBLIC_SITE_URL=https://meowdel.ai
+
+      # Anthropic API
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-5-20250929}
+
+      # Stripe Configuration
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+
+      # Stripe Price IDs - Base Tiers
+      - NEXT_PUBLIC_STRIPE_PRICE_PURR=${NEXT_PUBLIC_STRIPE_PRICE_PURR}
+      - NEXT_PUBLIC_STRIPE_PRICE_MEOW=${NEXT_PUBLIC_STRIPE_PRICE_MEOW}
+      - NEXT_PUBLIC_STRIPE_PRICE_BISCUITS=${NEXT_PUBLIC_STRIPE_PRICE_BISCUITS}
+      - NEXT_PUBLIC_STRIPE_PRICE_SWAT=${NEXT_PUBLIC_STRIPE_PRICE_SWAT}
+      - NEXT_PUBLIC_STRIPE_PRICE_ROAR=${NEXT_PUBLIC_STRIPE_PRICE_ROAR}
+
+      # Stripe Price IDs - Add-Ons
+      - NEXT_PUBLIC_STRIPE_ADDON_VOICE=${NEXT_PUBLIC_STRIPE_ADDON_VOICE}
+      - NEXT_PUBLIC_STRIPE_ADDON_WAKEUP=${NEXT_PUBLIC_STRIPE_ADDON_WAKEUP}
+      - NEXT_PUBLIC_STRIPE_ADDON_TEXTS=${NEXT_PUBLIC_STRIPE_ADDON_TEXTS}
+      - NEXT_PUBLIC_STRIPE_ADDON_REMINDERS=${NEXT_PUBLIC_STRIPE_ADDON_REMINDERS}
+
+      # Optional APIs (for future features)
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - ULTRAVOX_API_KEY=${ULTRAVOX_API_KEY:-}
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/chat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - meowdel-network
+
+networks:
+  meowdel-network:
+    driver: bridge

@@ -1,0 +1,268 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: meowdel
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: meowdel-config
+  namespace: meowdel
+data:
+  NEXT_PUBLIC_SITE_URL: "https://meowdel.ai"
+  # Cat Modes Available
+  CAT_MODES: "infosec,dns,smtp,code,general"
+  # Pricing - Anthropic charges ~$3/million input tokens, $15/million output tokens
+  # We'll mark it up 20% to cover infrastructure
+  MARKUP_PERCENTAGE: "20"
+  # After Dark Systems SSO
+  SSO_ENABLED: "true"
+  SSO_PROVIDER: "adsas.id"
+  SSO_CLIENT_ID: "meowdel-client"
+  # OAuth2 Configuration
+  OAUTH2_PROVIDER_URL: "https://adsas.id/application/o"
+  OAUTH2_CLIENT_ID: "meowdel-client"
+  OAUTH2_REDIRECT_URI: "https://meowdel.ai/api/auth/callback"
+  OAUTH2_SCOPES: "openid profile email"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: meowdel-secrets
+  namespace: meowdel
+type: Opaque
+stringData:
+  # SECURITY NOTICE: Do NOT commit actual secrets to version control!
+  # Create this secret using: kubectl create secret generic meowdel-secrets --from-env-file=.env -n meowdel
+  #
+  # Required secrets (replace CHANGEME_* with actual values):
+  OPENROUTER_API_KEY: "CHANGEME_OPENROUTER_API_KEY"
+  ELEVENLABS_API_KEY: "CHANGEME_ELEVENLABS_API_KEY"
+  ANTHROPIC_API_KEY: "CHANGEME_ANTHROPIC_API_KEY"
+  DATABASE_URL: "CHANGEME_DATABASE_URL"
+  OAUTH2_CLIENT_SECRET: "CHANGEME_OAUTH2_CLIENT_SECRET"
+  STRIPE_SECRET_KEY: "CHANGEME_STRIPE_SECRET_KEY"
+  STRIPE_WEBHOOK_SECRET: "CHANGEME_STRIPE_WEBHOOK_SECRET"
+  ULTRAVOX_API_KEY: "CHANGEME_ULTRAVOX_API_KEY"
+  JWT_SECRET: "CHANGEME_JWT_SECRET"
+  SESSION_SECRET: "CHANGEME_SESSION_SECRET"
+  ENCRYPTION_KEY: "CHANGEME_ENCRYPTION_KEY"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meowdel-web
+  namespace: meowdel
+  labels:
+    app: meowdel
+    component: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: meowdel
+      component: web
+  template:
+    metadata:
+      labels:
+        app: meowdel
+        component: web
+    spec:
+      imagePullSecrets:
+        - name: oci-registry
+      containers:
+      - name: meowdel
+        image: us-ashburn-1.ocir.io/idd2oizp8xvc/meowdel-web:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3000"
+        envFrom:
+        - configMapRef:
+            name: meowdel-config
+        - secretRef:
+            name: meowdel-secrets
+        resources:
+          requests:
+            memory: "768Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: meowdel-web
+  namespace: meowdel
+  labels:
+    app: meowdel
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: meowdel
+    component: web
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: meowdel-ingress
+  namespace: meowdel
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Rate limiting to prevent abuse
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+    # Proxy settings
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - meowdel.ai
+    - www.meowdel.ai
+    secretName: meowdel-tls
+  rules:
+  - host: meowdel.ai
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: meowdel-web
+            port:
+              number: 80
+  - host: www.meowdel.ai
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: meowdel-web
+            port:
+              number: 80
+---
+# HorizontalPodAutoscaler for handling traffic spikes
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: meowdel-hpa
+  namespace: meowdel
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: meowdel-web
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 60
+---
+# Pod Disruption Budget to maintain availability during cluster maintenance
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: meowdel-pdb
+  namespace: meowdel
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: meowdel
+      component: web
+---
+# Network Policy for security segmentation
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: meowdel-network-policy
+  namespace: meowdel
+spec:
+  podSelector:
+    matchLabels:
+      app: meowdel
+      component: web
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  # Allow HTTPS for external API calls
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow HTTP for internal services
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 80
+  # Allow database connections
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: databases
+    ports:
+    - protocol: TCP
+      port: 5432

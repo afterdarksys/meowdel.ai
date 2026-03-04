@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meowdel - Coming Soon!</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 600px;
+            background: white;
+            padding: 60px 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .cat {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 48px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 20px 0;
+        }
+
+        .subtitle {
+            font-size: 24px;
+            color: #666;
+            margin: 10px 0;
+        }
+
+        .meow {
+            font-size: 18px;
+            color: #999;
+            font-style: italic;
+            margin: 20px 0;
+        }
+
+        .status {
+            background: #f0f0f0;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 30px 0;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .status-value {
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .check {
+            color: #10b981;
+        }
+
+        .pending {
+            color: #f59e0b;
+        }
+
+        .footer {
+            margin-top: 30px;
+            color: #999;
+            font-size: 14px;
+        }
+
+        a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="cat">
+            <img src="web-app/public/gallery/meowdel_being_petted.png" alt="Meowdel" style="width: 120px; height: 120px; border-radius: 50%;">
+        </div>
+        <h1>Meowdel</h1>
+        <div class="subtitle">Claude AI with Cattitude</div>
+        <div class="meow">*meow* Coming Soon! *purr*</div>
+
+        <div class="status">
+            <div class="status-item">
+                <span class="status-label">DNS Configuration</span>
+                <span class="status-value check">Ready</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">SSL Certificate</span>
+                <span class="status-value pending">Provisioning</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Application</span>
+                <span class="status-value pending">Deploying</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Cat Modes</span>
+                <span class="status-value check">5 Modes Ready</span>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><strong>Meowdel Features:</strong></p>
+            <p>InfoSec Cat • DNS Cat • SMTP Cat • Code Cat • General Cat</p>
+            <p style="margin-top: 20px;">
+                <a href="https://afterdarksys.com">After Dark Systems</a> •
+                Powered by Claude AI
+            </p>
+            <p style="margin-top: 10px; font-size: 12px;">
+                *tail swish* We're making your servers purrfect!
+            </p>
+        </div>
+    </div>
+</body>
+</html>
