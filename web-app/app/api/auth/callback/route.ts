@@ -73,13 +73,23 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Link OAuth account to BrowserID
+    // Extract employee benefits for persistence
+    const employeeBenefits = isAfterDarkEmployee(userInfo.email) ? {
+      subscriptionTier: enhancedUserInfo.subscriptionTier,
+      subscriptionStatus: enhancedUserInfo.subscriptionStatus,
+      role: enhancedUserInfo.role,
+      isAfterDarkEmployee: enhancedUserInfo.isAfterDarkEmployee,
+      employeeDomain: enhancedUserInfo.employeeDomain,
+    } : undefined;
+
+    // Link OAuth account to BrowserID with employee benefits
     await linkBrowserIDToOAuth(
       browserIDCookie,
       'adsas',
       userInfo.sub,
       userInfo.email,
-      userInfo.name
+      userInfo.name,
+      employeeBenefits
     )
 
     // Get updated user
@@ -87,10 +97,12 @@ export async function GET(request: NextRequest) {
 
     console.log('[OAuth2] OAuth account linked successfully')
 
-    // Note: Employee benefits and subscription tiers need to be implemented in the schema
     if (isAfterDarkEmployee(userInfo.email)) {
-      console.log('[OAuth2] Employee benefits should be granted:', userInfo.email)
-      // TODO: Implement subscription tier updates in schema
+      console.log('[OAuth2] Employee benefits granted:', {
+        email: userInfo.email,
+        tier: enhancedUserInfo.subscriptionTier,
+        domain: enhancedUserInfo.employeeDomain
+      })
     }
 
     // Redirect back to homepage with success

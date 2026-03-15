@@ -65,11 +65,20 @@ export async function POST(req: Request) {
     // 5. Initiate Telnyx Outbound Call to the Meeting
     if (process.env.TELNYX_API_KEY && process.env.TELNYX_CONNECTION_ID) {
       const telnyx = Telnyx(process.env.TELNYX_API_KEY);
-      
+
+      // Validate caller phone number is configured
+      const callerPhoneNumber = process.env.TELNYX_PHONE_NUMBER;
+      if (!callerPhoneNumber) {
+        return NextResponse.json({
+          success: false,
+          error: 'TELNYX_PHONE_NUMBER environment variable is not configured'
+        }, { status: 500 });
+      }
+
       const outboundCall = await telnyx.calls.create({
         connection_id: process.env.TELNYX_CONNECTION_ID,
         to: meetingNumber,
-        from: '+15550000000', // In production, this would be the adstelco phone number
+        from: callerPhoneNumber,
         // We will pass the Ultravox Join URL (SIP URI) as client_state or custom_headers
         // to tell the Webhook to bridge the calls once answered.
         client_state: Buffer.from(JSON.stringify({

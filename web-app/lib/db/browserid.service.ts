@@ -3,8 +3,8 @@
  * PostgreSQL operations for BrowserID users
  */
 
-import { db } from '../db';
-import { browseridUsers, browseridOauthMappings } from './schema';
+import { db } from './db';
+import { browseridUsers, browseridOauthMappings, users } from './schema';
 import { eq, and, sql } from 'drizzle-orm';
 import type { CatPersonalityProfile } from '@/types/browserid';
 
@@ -112,13 +112,68 @@ export async function linkBrowserIDToOAuth(
   oauthProvider: string,
   oauthUserId: string,
   email?: string,
-  name?: string
+  name?: string,
+  employeeBenefits?: {
+    subscriptionTier?: string;
+    subscriptionStatus?: string;
+    role?: string;
+    isAfterDarkEmployee?: boolean;
+    employeeDomain?: string;
+  }
 ) {
   // Get current user
   const user = await db.select().from(browseridUsers).where(eq(browseridUsers.browserID, browserID)).limit(1);
 
   if (user.length === 0) {
     throw new Error('User not found');
+  }
+
+  // Create or update the users table record with OAuth and employee benefits
+  let dbUser;
+  const existingUser = await db.select().from(users).where(eq(users.oauthSub, oauthUserId)).limit(1);
+
+  if (existingUser.length > 0) {
+    // Update existing user
+    const updateData: any = {
+      email: email || existingUser[0].email,
+      name: name || existingUser[0].name,
+      oauthProvider,
+      lastLoginAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    // Apply employee benefits if provided
+    if (employeeBenefits) {
+      if (employeeBenefits.subscriptionTier) updateData.subscriptionTier = employeeBenefits.subscriptionTier;
+      if (employeeBenefits.subscriptionStatus) updateData.subscriptionStatus = employeeBenefits.subscriptionStatus;
+      if (employeeBenefits.role) updateData.role = employeeBenefits.role;
+      if (employeeBenefits.isAfterDarkEmployee !== undefined) updateData.isAfterDarkEmployee = employeeBenefits.isAfterDarkEmployee;
+      if (employeeBenefits.employeeDomain) updateData.employeeDomain = employeeBenefits.employeeDomain;
+    }
+
+    await db.update(users).set(updateData).where(eq(users.oauthSub, oauthUserId));
+    dbUser = { ...existingUser[0], ...updateData };
+  } else {
+    // Create new user
+    const newUserData: any = {
+      email: email || '',
+      name: name || '',
+      oauthSub: oauthUserId,
+      oauthProvider,
+      lastLoginAt: new Date(),
+    };
+
+    // Apply employee benefits if provided
+    if (employeeBenefits) {
+      if (employeeBenefits.subscriptionTier) newUserData.subscriptionTier = employeeBenefits.subscriptionTier;
+      if (employeeBenefits.subscriptionStatus) newUserData.subscriptionStatus = employeeBenefits.subscriptionStatus;
+      if (employeeBenefits.role) newUserData.role = employeeBenefits.role;
+      if (employeeBenefits.isAfterDarkEmployee !== undefined) newUserData.isAfterDarkEmployee = employeeBenefits.isAfterDarkEmployee;
+      if (employeeBenefits.employeeDomain) newUserData.employeeDomain = employeeBenefits.employeeDomain;
+    }
+
+    const insertResult = await db.insert(users).values(newUserData).returning();
+    dbUser = insertResult[0];
   }
 
   // Get all BrowserIDs linked to this OAuth account
@@ -173,11 +228,12 @@ export async function linkBrowserIDToOAuth(
     );
   }
 
-  // Update all linked BrowserIDs with merged personality
+  // Update all linked BrowserIDs with merged personality and link to users table
   for (const linkedBrowserID of existingBrowserIDs) {
     await db
       .update(browseridUsers)
       .set({
+        userId: dbUser.id, // Link to users table
         oauthProvider,
         oauthLinkedAt: new Date(),
         email,
