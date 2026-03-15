@@ -3,7 +3,7 @@
  * PostgreSQL operations for BrowserID users
  */
 
-import { db } from './db';
+import { db } from '../db';
 import { browseridUsers, browseridOauthMappings, users } from './schema';
 import { eq, and, sql } from 'drizzle-orm';
 import type { CatPersonalityProfile } from '@/types/browserid';
