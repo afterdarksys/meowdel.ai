@@ -5,6 +5,8 @@ import { Sparkles, MessageSquare, X, Send, Loader2, Paperclip, FileText, Cat, Us
 import { useDropzone } from 'react-dropzone'
 import { BrainNote } from '@/app/api/brain/notes/route'
 import { useSettings } from '@/lib/settings-context'
+import { useGlobalChat } from '@/lib/chat-context'
+import { PurrAudio } from './purr-audio'
 
 export interface BrainChatPanelProps {
   activeNote?: BrainNote | null
@@ -22,6 +24,7 @@ export function BrainChatPanel({ activeNote, isOpen, onClose }: BrainChatPanelPr
   const messagesEndRef = useRef<HTMLDivElement>(null)
   
   const { brainPersonality, setBrainPersonality } = useSettings()
+  const { isZoomies } = useGlobalChat()
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return
@@ -76,6 +79,38 @@ export function BrainChatPanel({ activeNote, isOpen, onClose }: BrainChatPanelPr
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // HISS PROTOCOL: Threat Polling
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    let lastSeenThreatId: string | null = null;
+    
+    const pollThreats = async () => {
+        try {
+            const res = await fetch('/api/brain/threats');
+            const data = await res.json();
+            
+            if (data.threat && data.threat.id !== lastSeenThreatId) {
+                lastSeenThreatId = data.threat.id;
+                
+                // Hijack the chat!
+                const emergencyMsg: Message = {
+                    id: `threat-${data.threat.id}`,
+                    role: 'assistant',
+                    content: `🚨 **HSSSSS! INTRUSION BLOCKED!** 🚨\n\nSir, the local After Dark daemon (${data.threat.source}) just intercepted a threat!\n\n**Details**: ${data.threat.message}\n**Severity**: ${data.threat.severity.toUpperCase()}\n\nShall I isolate this endpoint from the network?`
+                };
+                
+                setMessages(prev => [...prev, emergencyMsg]);
+            }
+        } catch (e) {
+            // Silently fail polling
+        }
+    };
+
+    const intervalId = setInterval(pollThreats, 3000);
+    return () => clearInterval(intervalId);
+  }, [isOpen]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
@@ -98,7 +133,8 @@ export function BrainChatPanel({ activeNote, isOpen, onClose }: BrainChatPanelPr
         body: JSON.stringify({
           messages: [...messages, userMessage],
           contextNode: activeNote,
-          personality: brainPersonality
+          personality: brainPersonality,
+          isZoomies
         }),
       })
 
@@ -142,6 +178,7 @@ export function BrainChatPanel({ activeNote, isOpen, onClose }: BrainChatPanelPr
 
   return (
     <div {...getRootProps()} className={`w-80 border-l bg-card/50 backdrop-blur-xl flex flex-col h-full shadow-2xl z-40 flex-shrink-0 animate-in slide-in-from-right-full ${isDragActive ? 'ring-2 ring-primary ring-inset bg-primary/5' : ''}`}>
+      <PurrAudio isPurring={isLoading && brainPersonality === 'cat'} />
       <input {...getInputProps()} />
       {isDragActive && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary m-4 rounded-xl">

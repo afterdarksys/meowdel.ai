@@ -52,6 +52,21 @@ spec:
                 configMapKeyRef:
                   name: meowdel-config
                   key: OAUTH2_SCOPES
+            - name: BRAIN_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: meowdel-config
+                  key: BRAIN_DIR
+            - name: GRAPH_CACHE_TTL
+              valueFrom:
+                configMapKeyRef:
+                  name: meowdel-config
+                  key: GRAPH_CACHE_TTL
+            - name: AI_WORKER_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: meowdel-config
+                  key: AI_WORKER_ENABLED
 
             # From Secrets
             - name: DATABASE_URL
@@ -79,6 +94,11 @@ spec:
             - name: REDIS_URL
               value: "redis://redis-service:6379"
 
+          volumeMounts:
+            - name: brain-storage
+              mountPath: /app/brain
+              readOnly: false
+
           resources:
             requests:
               memory: "512Mi"
@@ -100,6 +120,11 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
+
+      volumes:
+        - name: brain-storage
+          persistentVolumeClaim:
+            claimName: brain-pvc
 
 ---
 apiVersion: v1

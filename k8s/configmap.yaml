@@ -24,3 +24,8 @@ data:
   OAUTH2_PROVIDER_URL: "https://adsas.id/application/o"
   OAUTH2_REDIRECT_URI: "https://meowdel.ai/api/auth/callback"
   OAUTH2_SCOPES: "openid profile email"
+
+  # Brain Knowledge System
+  BRAIN_DIR: "/app/brain"
+  GRAPH_CACHE_TTL: "300"  # 5 minutes cache for graph API
+  AI_WORKER_ENABLED: "false"  # Disabled until file locking is implemented

@@ -46,8 +46,16 @@ export default function remarkWikilink() {
         const linkText = match[1];
         const [page, ...aliasParts] = linkText.split('|');
         const alias = aliasParts.length > 0 ? aliasParts.join('|') : page;
-        
+
         const permalink = page.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+
+        // XSS PROTECTION: Validate permalink doesn't start with dangerous protocols
+        if (permalink.startsWith('javascript') || permalink.startsWith('data') || permalink.startsWith('vbscript')) {
+          console.error(`[XSS] Blocked dangerous wikilink: ${permalink}`);
+          // Replace with safe text node instead
+          newChildren.push({ type: 'text', value: `[[${linkText}]]` } as TextNode);
+          return;
+        }
 
         newChildren.push({
           type: 'wikiLink',

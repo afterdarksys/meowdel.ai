@@ -7,11 +7,26 @@ function getBrainDir(): string {
   return path.resolve(process.cwd(), '../brain')
 }
 
-function getFilePath(slugParts: string[]) {
+function getFilePath(slugParts: string[]): string | null {
+  const brainDir = getBrainDir()
   const relPath = slugParts.join('/')
-  // Prevent directory traversal attacks
-  const safePath = path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, '')
-  return path.join(getBrainDir(), `${safePath}.md`)
+
+  // CRITICAL SECURITY: Validate path doesn't contain traversal attempts
+  if (relPath.includes('..') || relPath.includes('\0') || relPath.includes('\x00')) {
+    console.error(`[SECURITY] Path traversal attempt blocked: ${relPath}`)
+    return null
+  }
+
+  // Resolve to absolute path
+  const requestedPath = path.resolve(brainDir, `${relPath}.md`)
+
+  // CRITICAL: Verify the resolved path is within brain directory
+  if (!requestedPath.startsWith(brainDir + path.sep) && requestedPath !== brainDir) {
+    console.error(`[SECURITY] Path outside brain directory blocked: ${relPath} -> ${requestedPath}`)
+    return null
+  }
+
+  return requestedPath
 }
 
 export async function GET(
@@ -21,6 +36,10 @@ export async function GET(
   try {
     const slugParams = await params
     const filePath = getFilePath(slugParams.slug)
+
+    if (!filePath) {
+      return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
+    }
 
     try {
       const content = await fs.readFile(filePath, 'utf8')
@@ -51,6 +70,11 @@ export async function PUT(
   try {
     const slugParams = await params
     const filePath = getFilePath(slugParams.slug)
+
+    if (!filePath) {
+      return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
+    }
+
     const { content, title, tags, frontmatter } = await request.json()
 
     // We'll read the existing file to preserve unmanaged frontmatter if any,
@@ -75,10 +99,11 @@ export async function PUT(
     const fileContent = matter.stringify(content, mergedFrontmatter)
     await fs.writeFile(filePath, fileContent, 'utf8')
 
-    // Fire off background AI workers without awaiting them
-    import('@/lib/workers/brain').then((workers) => {
-      workers.processNoteWorkers(filePath, content, mergedFrontmatter.tags)
-    }).catch(e => console.error("Worker import failed", e))
+    // DISABLED: Background AI workers to prevent race conditions
+    // TODO: Re-enable with proper file locking
+    // import('@/lib/workers/brain').then((workers) => {
+    //   workers.processNoteWorkers(filePath, content, mergedFrontmatter.tags)
+    // }).catch(e => console.error("Worker import failed", e))
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -94,6 +119,10 @@ export async function DELETE(
   try {
     const slugParams = await params
     const filePath = getFilePath(slugParams.slug)
+
+    if (!filePath) {
+      return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
+    }
 
     try {
       await fs.unlink(filePath)

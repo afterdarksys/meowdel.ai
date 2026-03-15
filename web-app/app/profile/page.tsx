@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import ApiKeyManager from '@/components/ApiKeyManager'
+import GithubIntegration from '@/components/GithubIntegration'
 
 export default async function ProfilePage() {
     const cookieStore = await cookies()
@@ -92,12 +93,20 @@ export default async function ProfilePage() {
                         </div>
 
                         {/* Account Settings */}
-                        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 shadow-xl hover:bg-white/10 transition-colors duration-300 cursor-pointer">
-                            <h3 className="text-lg font-semibold mb-4 text-purple-300">Account Settings</h3>
+                        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 shadow-xl hover:bg-white/10 transition-colors duration-300">
+                            <h3 className="text-lg font-semibold mb-4 text-purple-300">Data & Settings</h3>
                             <ul className="space-y-3 text-sm text-gray-300">
-                                <li className="flex items-center space-x-2"><span className="w-2 h-2 rounded-full bg-green-400"></span> <span>Manage Subscription</span></li>
-                                <li className="flex items-center space-x-2"><span className="w-2 h-2 rounded-full bg-blue-400"></span> <span>SSO Security</span></li>
-                                <li className="flex items-center space-x-2"><span className="w-2 h-2 rounded-full bg-pink-400"></span> <span>Export My Data</span></li>
+                                <Link href="/profile/catnip" className="flex items-center space-x-2 hover:text-white transition-colors cursor-pointer group">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 group-hover:scale-150 transition-transform"></span> 
+                                    <span>Catnip Store (Rewards)</span>
+                                </Link>
+                                <Link href="/profile/importers" className="flex items-center space-x-2 hover:text-white transition-colors cursor-pointer group">
+                                    <span className="w-2 h-2 rounded-full bg-purple-400 group-hover:scale-150 transition-transform"></span> 
+                                    <span>External Importers (Notion, Google, etc)</span>
+                                </Link>
+                                <li className="flex items-center space-x-2 cursor-pointer hover:text-white transition-colors group"><span className="w-2 h-2 rounded-full bg-green-400 group-hover:scale-150 transition-transform"></span> <span>Manage Subscription</span></li>
+                                <li className="flex items-center space-x-2 cursor-pointer hover:text-white transition-colors group"><span className="w-2 h-2 rounded-full bg-blue-400 group-hover:scale-150 transition-transform"></span> <span>SSO Security</span></li>
+                                <li className="flex items-center space-x-2 cursor-pointer hover:text-white transition-colors group"><span className="w-2 h-2 rounded-full bg-pink-400 group-hover:scale-150 transition-transform"></span> <span>Export My Data</span></li>
                             </ul>
                         </div>
                     </div>
@@ -160,6 +169,9 @@ export default async function ProfilePage() {
                 
                 {/* API Key Manager Component */}
                 <ApiKeyManager />
+                
+                {/* GitHub Integration Component */}
+                <GithubIntegration />
             </div>
         </div >
     )

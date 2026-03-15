@@ -84,7 +84,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const brainDir = getBrainDir()
-    const { title, slug: requestedSlug, content, tags } = await request.json()
+    const { title, slug: requestedSlug, content, tags, template } = await request.json()
 
     if (!title) {
         return NextResponse.json({ error: 'Title is required' }, { status: 400 })
@@ -104,9 +104,37 @@ export async function POST(request: Request) {
       // Good, it doesn't exist
     }
 
-    const fileContent = matter.stringify(content || `\n# ${title}\n`, {
+    let finalContent = content || ''
+    let finalTags = tags || []
+
+    // Handle template substitution
+    if (template) {
+      const templatePath = path.join(brainDir, 'templates', `${template}.md`)
+      try {
+        const templateContent = await fs.readFile(templatePath, 'utf8')
+        const { data: templateData, content: templateBody } = matter(templateContent)
+        
+        let processedBody = templateBody
+          .replace(/\{\{\s*title\s*\}\}/g, title)
+          .replace(/\{\{\s*date\s*\}\}/g, new Date().toLocaleDateString())
+          
+        finalContent = processedBody + (finalContent ? `\n\n${finalContent}` : '')
+        
+        if (templateData.tags && Array.isArray(templateData.tags)) {
+           finalTags = [...new Set([...finalTags, ...templateData.tags])]
+        }
+      } catch (err) {
+         console.warn(`Template ${template} not found or failed to load.`, err)
+      }
+    }
+
+    if (!finalContent.trim()) {
+        finalContent = `\n# ${title}\n`
+    }
+
+    const fileContent = matter.stringify(finalContent, {
       title,
-      tags: tags || [],
+      tags: finalTags,
       created: new Date().toISOString()
     })
 

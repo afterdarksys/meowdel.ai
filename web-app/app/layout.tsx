@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SettingsProvider } from "@/lib/settings-context";
+import { GlobalChatProvider } from "@/lib/chat-context";
 
 // Force dynamic rendering - prevent Next.js from prerendering and caching
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,9 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <SettingsProvider>
-            {children}
+            <GlobalChatProvider>
+              {children}
+            </GlobalChatProvider>
           </SettingsProvider>
         </ThemeProvider>
       </body>

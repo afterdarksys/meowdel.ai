@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { NoteEditor } from "@/components/note-editor"
 import { BrainNote } from "@/app/api/brain/notes/route"
+import { useGlobalChat } from "@/lib/chat-context"
 
 export default function NotePage() {
   const params = useParams()
@@ -12,6 +13,7 @@ export default function NotePage() {
 
   const [note, setNote] = useState<BrainNote | null>(null)
   const [loading, setLoading] = useState(true)
+  const { setActiveContextNote, setChatOpen } = useGlobalChat()
 
   useEffect(() => {
     if (!slug) return
@@ -22,6 +24,7 @@ export default function NotePage() {
       .then(data => {
         if (!data.error) {
           setNote(data)
+          setActiveContextNote(data) // Set global context
         }
         setLoading(false)
       })
@@ -44,6 +47,7 @@ export default function NotePage() {
       initialContent={note.content} 
       initialTitle={note.title} 
       slug={slug} 
+      onOpenChat={() => setChatOpen(true)}
     />
   )
 }

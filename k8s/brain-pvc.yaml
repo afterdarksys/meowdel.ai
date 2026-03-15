@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: brain-pvc
+  namespace: meowdel
+  labels:
+    app: meowdel
+    component: brain
+spec:
+  accessModes:
+    - ReadWriteMany  # CRITICAL: Required for multi-pod access
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: oci-fss  # OCI File Storage Service for ReadWriteMany support
+  # Alternative: oci-bv-nvme for high-performance block storage (single pod only)
