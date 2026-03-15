@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/components/theme-provider";
+import { SettingsProvider } from "@/lib/settings-context";
 
 // Force dynamic rendering - prevent Next.js from prerendering and caching
 export const dynamic = 'force-dynamic';
@@ -17,8 +19,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Meowdel - Claude AI with Cat Personality",
-  description: "Chat with Claude AI enhanced with cat personality. Your coding companion with extra purrs!",
+  title: "Meowdel - 10x AI Brain",
+  description: "Your 10x AI Knowledge Companion",
 };
 
 export default function RootLayout({
@@ -27,11 +29,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased selection:bg-primary selection:text-primary-foreground min-h-screen relative`}
       >
-        {children}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <SettingsProvider>
+            {children}
+          </SettingsProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

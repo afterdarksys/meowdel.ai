@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import ApiKeyManager from '@/components/ApiKeyManager'
 
 export default async function ProfilePage() {
     const cookieStore = await cookies()
@@ -156,6 +157,9 @@ export default async function ProfilePage() {
 
                     </div>
                 </div>
+                
+                {/* API Key Manager Component */}
+                <ApiKeyManager />
             </div>
         </div >
     )

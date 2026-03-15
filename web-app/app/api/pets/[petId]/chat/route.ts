@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { getPersonalityById } from '@/lib/personality/engine'
+import { searchBrain } from '@/lib/brain/rag'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -79,7 +80,15 @@ export async function POST(
       return NextResponse.json({ error: 'Rate limit exceeded. Please try again later.' }, { status: 429 });
     }
 
-    // 4. Build messages array for Claude
+    // 4. Brain RAG Context Retrieval
+    const brainSnippets = await searchBrain(message)
+    let finalPrompt = message
+    if (brainSnippets.length > 0) {
+      const contextXML = brainSnippets.map(doc => `<document id="${doc.id}">\n${doc.content}\n</document>`).join('\n\n')
+      finalPrompt = `${message}\n\n<brain_context>\n${contextXML}\n</brain_context>`
+    }
+
+    // 5. Build messages array for Claude
     const messages: Anthropic.MessageParam[] = [
       ...conversationHistory.map((msg: { role: string, content: string }) => ({
         role: msg.role as 'user' | 'assistant',
@@ -87,11 +96,11 @@ export async function POST(
       })),
       {
         role: 'user' as const,
-        content: message
+        content: finalPrompt
       }
     ]
 
-    // 5. Call Claude API With Personality
+    // 6. Call Claude API With Personality
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 1024,
@@ -103,7 +112,7 @@ export async function POST(
       ? response.content[0].text
       : ''
 
-    // 6. Select appropriate photo
+    // 7. Select appropriate photo
     const hasCode = message.match(/```|function|const|let|var|class|def|import/)
     const photo = personality.selectPhoto({
       hasCode: !!hasCode,

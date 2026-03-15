@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-pvc
+  namespace: meowdel
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi  # Ollama models can be large
+  storageClassName: standard
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: meowdel
+  labels:
+    app: ollama
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest
+          ports:
+            - containerPort: 11434
+          volumeMounts:
+            - name: ollama-storage
+              mountPath: /root/.ollama
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2000m"
+            limits:
+              memory: "8Gi"
+              cpu: "4000m"
+              # Uncomment for NVIDIA GPU support
+              # nvidia.com/gpu: 1
+          livenessProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: ollama-storage
+          persistentVolumeClaim:
+            claimName: ollama-pvc
+      # Uncomment for GPU node scheduling
+      # nodeSelector:
+      #   gpu: "true"
+      # tolerations:
+      #   - key: nvidia.com/gpu
+      #     operator: Exists
+      #     effect: NoSchedule
+
+---
+# Model initialization job - runs once to pull models
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ollama-model-init
+  namespace: meowdel
+spec:
+  template:
+    spec:
+      containers:
+        - name: model-puller
+          image: ollama/ollama:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "🐱 Waiting for Ollama service..."
+              until curl -f http://ollama-service:11434/api/tags; do
+                sleep 5
+              done
+              echo "✅ Ollama ready! Pulling models..."
+              ollama pull llama3.2:3b
+              ollama pull mistral:7b
+              echo "🎉 Models ready!"
+          env:
+            - name: OLLAMA_HOST
+              value: "http://ollama-service:11434"
+      restartPolicy: OnFailure
+  backoffLimit: 3
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-service
+  namespace: meowdel
+spec:
+  selector:
+    app: ollama
+  ports:
+    - port: 11434
+      targetPort: 11434
+  type: ClusterIP

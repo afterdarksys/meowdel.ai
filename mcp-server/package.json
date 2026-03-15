@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "type": "module",
   "bin": {
-    "meowdel-mcp": "./dist/index.js"
+    "meowdel-mcp": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -26,8 +26,9 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^25.3.2",
+    "@types/node": "^25.5.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
-  }
+  },
+  "types": "./dist/index.d.ts"
 }

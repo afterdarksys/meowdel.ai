@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: meowdel-config
+  namespace: meowdel
+data:
+  # Application Config
+  NODE_ENV: "production"
+  NEXT_PUBLIC_SITE_URL: "https://meowdel.ai"
+
+  # Database
+  POSTGRES_DB: "meowdel"
+  DATABASE_HOST: "postgres-service"
+  DATABASE_PORT: "5432"
+
+  # Redis
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+
+  # Ollama
+  OLLAMA_BASE_URL: "http://ollama-service:11434"
+
+  # OAuth2 / Authentik (non-sensitive)
+  OAUTH2_PROVIDER_URL: "https://adsas.id/application/o"
+  OAUTH2_REDIRECT_URI: "https://meowdel.ai/api/auth/callback"
+  OAUTH2_SCOPES: "openid profile email"
