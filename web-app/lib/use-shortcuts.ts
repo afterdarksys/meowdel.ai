@@ -8,9 +8,14 @@ export interface ShortcutHandlers {
   onToggleZoomies?: () => void
   onNewNote?: () => void
   onOpenGraph?: () => void
+  onQuickLink?: () => void
+  onQuickTag?: () => void
+  onQuickSave?: () => void
+  onBold?: () => void
+  onItalic?: () => void
 }
 
-export function useShortcuts({ onToggleChat, onOpenSearch, onToggleZoomies, onNewNote, onOpenGraph }: ShortcutHandlers) {
+export function useShortcuts({ onToggleChat, onOpenSearch, onToggleZoomies, onNewNote, onOpenGraph, onQuickLink, onQuickTag, onQuickSave, onBold, onItalic }: ShortcutHandlers) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Cmd/Ctrl + Shift + M for Chat
@@ -42,9 +47,45 @@ export function useShortcuts({ onToggleChat, onOpenSearch, onToggleZoomies, onNe
         e.preventDefault()
         if (onOpenGraph) onOpenGraph()
       }
+
+      // Cmd/Ctrl + Shift + L for Quick Link
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault()
+        if (onQuickLink) onQuickLink()
+      }
+
+      // Cmd/Ctrl + Shift + T for Quick Tag
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 't') {
+        e.preventDefault()
+        if (onQuickTag) onQuickTag()
+      }
+
+      // Cmd/Ctrl + Shift + S for Quick Save
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        if (onQuickSave) onQuickSave()
+      }
+
+      // Cmd/Ctrl + B for Bold (only in editor context)
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
+        const target = e.target as HTMLElement
+        if (target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
+          e.preventDefault()
+          if (onBold) onBold()
+        }
+      }
+
+      // Cmd/Ctrl + I for Italic (only in editor context)
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'i') {
+        const target = e.target as HTMLElement
+        if (target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
+          e.preventDefault()
+          if (onItalic) onItalic()
+        }
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onToggleChat, onOpenSearch, onToggleZoomies, onNewNote, onOpenGraph])
+  }, [onToggleChat, onOpenSearch, onToggleZoomies, onNewNote, onOpenGraph, onQuickLink, onQuickTag, onQuickSave, onBold, onItalic])
 }

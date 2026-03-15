@@ -10,6 +10,7 @@ import { BrainNote } from '@/app/api/brain/notes/route'
 import { InlineAiMenu } from '@/components/inline-ai-menu'
 import { VersionHistory } from '@/components/version-history'
 import { findLinkTrigger, fuzzyMatch } from '@/lib/link-suggester'
+import { useShortcuts } from '@/lib/use-shortcuts'
 
 // Dynamically import MDEditor with SSR disabled
 const MDEditor = dynamic(
@@ -274,6 +275,57 @@ export function NoteEditor({ initialContent, initialTitle, initialTags = [], slu
       setIsSaving(false)
     }
   }
+
+  // Keyboard shortcut handlers
+  const wrapSelectedText = (prefix: string, suffix?: string) => {
+    const textarea = document.querySelector('textarea[class*="w-md-editor-text"]') as HTMLTextAreaElement
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const selectedText = content.substring(start, end)
+
+    if (selectedText) {
+      const wrapped = `${prefix}${selectedText}${suffix || prefix}`
+      const newContent = content.substring(0, start) + wrapped + content.substring(end)
+      setContent(newContent)
+
+      // Restore selection after state update
+      setTimeout(() => {
+        textarea.focus()
+        textarea.setSelectionRange(start + prefix.length, end + prefix.length)
+      }, 0)
+    }
+  }
+
+  const handleQuickLink = () => {
+    wrapSelectedText('[[', ']]')
+  }
+
+  const handleQuickTag = () => {
+    handleAutoTag()
+  }
+
+  const handleQuickSave = () => {
+    handleSave()
+  }
+
+  const handleBold = () => {
+    wrapSelectedText('**')
+  }
+
+  const handleItalic = () => {
+    wrapSelectedText('*')
+  }
+
+  // Initialize keyboard shortcuts
+  useShortcuts({
+    onQuickLink: handleQuickLink,
+    onQuickTag: handleQuickTag,
+    onQuickSave: handleQuickSave,
+    onBold: handleBold,
+    onItalic: handleItalic,
+  })
 
   // Auto-save debounce effect could go here
 
