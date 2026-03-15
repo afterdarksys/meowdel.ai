@@ -1,0 +1,34 @@
+{
+  "name": "@meowdel/cli",
+  "version": "1.0.0",
+  "description": "Meowdel AI CLI - Chat with your AI cat personalities from the terminal",
+  "main": "dist/index.js",
+  "bin": {
+    "meowdel": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "link": "npm run build && npm link"
+  },
+  "keywords": ["ai", "chat", "cli", "meowdel"],
+  "author": "After Dark Systems",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "axios": "^1.6.2",
+    "ora": "^5.4.1",
+    "inquirer": "^8.2.5",
+    "blessed": "^0.1.81",
+    "blessed-contrib": "^4.11.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@types/inquirer": "^9.0.7",
+    "@types/blessed": "^0.1.25",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2"
+  }
+}

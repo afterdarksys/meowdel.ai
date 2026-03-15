@@ -8,9 +8,9 @@ metadata:
     component: brain
 spec:
   accessModes:
-    - ReadWriteMany  # CRITICAL: Required for multi-pod access
+    - ReadWriteOnce  # NOTE: Changed from RWX - only one pod can mount at a time
+    # TODO: Set up NFS or OCI FSS for ReadWriteMany support for multi-pod scaling
   resources:
     requests:
       storage: 50Gi
-  storageClassName: oci-fss  # OCI File Storage Service for ReadWriteMany support
-  # Alternative: oci-bv-nvme for high-performance block storage (single pod only)
+  storageClassName: oci-bv  # OCI Block Volume (default)
