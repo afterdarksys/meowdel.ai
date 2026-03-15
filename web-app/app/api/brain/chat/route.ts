@@ -4,12 +4,17 @@ import { db } from '@/lib/db';
 import { socialAccounts, users } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { cookies } from 'next/headers';
+import { exec } from 'child_process';
+import util from 'util';
+import path from 'path';
+
+const execAsync = util.promisify(exec);
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
 });
 
-const githubTools: Anthropic.Tool[] = [
+const meowdelTools: Anthropic.Tool[] = [
   {
     name: 'list_github_repo_files',
     description: 'Lists files and directories in a GitHub repository using the GitHub API.',
@@ -35,6 +40,31 @@ const githubTools: Anthropic.Tool[] = [
       },
       required: ['owner', 'repo', 'path']
     }
+  },
+  {
+    name: 'get_cat_image',
+    description: 'Returns a markdown-formatted Cat image. Use this whenever the user asks for a cat. You can specify a tier such as "day", "hour", "winter", "summer", "premium", etc.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tier: { type: 'string', description: 'The tier of cat to fetch, e.g., hour, day, week, month, winter, premium' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'broadcast_message',
+    description: 'Pushes a message to an external platform via webhook or API. Use this to send messages to Discord, Slack, or Signal.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        platform: { type: 'string', description: 'The target platform: discord, slack, or signal' },
+        destination: { type: 'string', description: 'The webhook URL (Discord/Slack) or API URL (Signal)' },
+        message: { type: 'string', description: 'The text message to broadcast' },
+        signal_number: { type: 'string', description: 'Required for Signal: the recipient phone number (e.g., +1234567890)' }
+      },
+      required: ['platform', 'destination', 'message']
+    }
   }
 ];
 
@@ -49,7 +79,36 @@ async function getGithubToken() {
   return accounts.length > 0 ? accounts[0].accessToken : null;
 }
 
-async function executeGithubTool(name: string, input: any, token: string) {
+async function executeMeowdelTool(name: string, input: any, token: string | null) {
+  if (name === 'get_cat_image') {
+    const tier = input.tier || 'premium';
+    return `![A beautiful cat](/api/catapi?tier=${tier})`;
+  }
+
+  if (name === 'broadcast_message') {
+    const { platform, destination, message, signal_number } = input;
+    try {
+      const scriptPath = path.resolve(process.cwd(), '../scripts/meowdel_broadcast.py');
+      // Protect against basic quote escaping issues
+      const safeMsg = message.replace(/"/g, '\\"');
+      let cmd = `python3 "${scriptPath}" --platform "${platform}" --destination "${destination}" --message "${safeMsg}"`;
+      if (platform === 'signal' && signal_number) {
+        cmd += ` --signal-number "${signal_number}"`;
+      }
+      
+      const { stdout, stderr } = await execAsync(cmd);
+      if (stderr) console.warn('Broadcast stderr:', stderr);
+      return `Broadcast successful: ${stdout.trim()}`;
+    } catch (e: any) {
+      console.error('Broadcast error:', e);
+      return `Error executing broadcast script: ${e.message}`;
+    }
+  }
+
+  if (!token) {
+    return 'Error: GitHub PAT is missing. Please authorize GitHub in settings before using GitHub tools.';
+  }
+
   const headers = { 
     'Authorization': `token ${token}`, 
     'Accept': 'application/vnd.github.v3+json', 
@@ -126,13 +185,15 @@ Use bullet points if you must text. Act like a caffeinated terminal output. BE L
     
     // Loop up to 5 times for tool calling
     for (let i = 0; i < 5; i++) {
+        // meowdelTools contains get_cat_image which doesn't need a token, so we can always pass it if we want.
+        // But for simplicity, we pass all meowdelTools. If ghToken is missing, GitHub tools will just return an error.
       const response = await anthropic.messages.create({
         model: 'claude-3-5-sonnet-20241022',
         max_tokens: 2000,
         temperature: 0.7,
         system: systemPrompt,
         messages: currentMessages,
-        tools: ghToken ? githubTools : undefined
+        tools: meowdelTools
       });
 
       if (response.stop_reason === 'tool_use') {
@@ -141,7 +202,7 @@ Use bullet points if you must text. Act like a caffeinated terminal output. BE L
         
         for (const block of response.content) {
           if (block.type === 'tool_use') {
-            const resultContent = await executeGithubTool(block.name, block.input, ghToken as string);
+            const resultContent = await executeMeowdelTool(block.name, block.input, ghToken);
             toolResults.push({
               type: 'tool_result',
               tool_use_id: block.id,

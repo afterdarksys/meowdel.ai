@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { Plug, Search, Download, Trash2, CheckCircle2, ChevronRight, Puzzle } from "lucide-react"
 
+import { CodeToNoteSetup } from "@/components/code-to-note-setup"
+
 // Import type from our route
 interface McpPlugin {
   id: string
@@ -63,6 +65,8 @@ export default function PluginsPage() {
         </h1>
         <p className="text-muted-foreground text-lg">Extend Meowdel with intelligent tools and MCP integrations.</p>
       </div>
+
+      <CodeToNoteSetup />
 
       <div className="relative max-w-xl">
          <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />

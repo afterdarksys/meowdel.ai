@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Brain, FileCode, Network, Plus, Settings, Search, Hash, Activity, Plug, FileQuestion, ChevronDown, ChevronRight, FileText, MoonStar, Loader2 } from "lucide-react"
+import { Brain, FileCode, Network, Plus, Settings, Search, Hash, Activity, Plug, FileQuestion, ChevronDown, ChevronRight, FileText, MoonStar, Loader2, Image as ImageIcon } from "lucide-react"
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -62,6 +62,7 @@ export function Sidebar() {
     { icon: Network, label: "Knowledge Graph", href: "/brain/yarn" },
     { icon: FileQuestion, label: "Orphans", href: "/brain/orphans" },
     { icon: FileCode, label: "All Notes", href: "/brain/notes" },
+    { icon: ImageIcon, label: "Visual Search", href: "/brain/visual-search" },
   ]
 
   return (

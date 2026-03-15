@@ -84,6 +84,25 @@ export const userProfiles = pgTable('user_profiles', {
 ])
 
 // ============================================
+// GAMIFICATION (DIGITAL CATNIP)
+// ============================================
+
+export const userAchievements = pgTable('user_achievements', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  
+  // Achievement info
+  badgeId: varchar('badge_id', { length: 100 }).notNull(), // e.g., 'first_10_notes', '7_day_streak'
+  
+  // Metadata & Timestamps
+  earnedAt: timestamp('earned_at', { withTimezone: true }).defaultNow().notNull(),
+  metadata: jsonb('metadata').default({}),
+}, (table) => [
+  uniqueIndex('user_achievements_user_badge_idx').on(table.userId, table.badgeId),
+  index('user_achievements_user_id_idx').on(table.userId, table.earnedAt),
+])
+
+// ============================================
 // SOCIAL MEDIA ACCOUNTS
 // ============================================
 
@@ -245,6 +264,55 @@ export const clientSyncData = pgTable('client_sync_data', {
 }, (table) => [
   index('client_sync_data_client_id_idx').on(table.clientId, table.syncedAt),
   index('client_sync_data_user_id_idx').on(table.userId, table.dataType),
+])
+
+// ============================================
+// VOICE LIBRARY & BINDINGS (ELEVENLABS)
+// ============================================
+
+export const voiceModels = pgTable('voice_models', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  
+  // ElevenLabs mapping
+  elevenLabsVoiceId: varchar('elevenlabs_voice_id', { length: 255 }).unique().notNull(),
+  
+  // Voice Metadata
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  previewUrl: text('preview_url'), // Link to an audio preview
+  
+  // Pricing & Monetization
+  baseCostPerMinuteCents: integer('base_cost_per_minute_cents').default(0).notNull(), // Underlying ElevenLabs cost
+  markupPerMinuteCents: integer('markup_per_minute_cents').default(20).notNull(), // Our profit margin (e.g. 20 cents)
+  
+  // Tags/Categories
+  category: varchar('category', { length: 100 }), // e.g., 'professional', 'funny', 'cartoony'
+  isPremium: boolean('is_premium').default(false).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('voice_models_active_idx').on(table.isActive),
+])
+
+export const userVoiceBindings = pgTable('user_voice_bindings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  
+  // The Meowdel personality ID (e.g. 'professor', 'ninja', 'mittens')
+  personalityId: varchar('personality_id', { length: 100 }).notNull(),
+  
+  // The bound voice
+  voiceModelId: uuid('voice_model_id').references(() => voiceModels.id, { onDelete: 'cascade' }).notNull(),
+  
+  isActive: boolean('is_active').default(true).notNull(),
+  
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('user_voice_bindings_user_personality_idx').on(table.userId, table.personalityId),
+  index('user_voice_bindings_user_id_idx').on(table.userId),
 ])
 
 // ============================================

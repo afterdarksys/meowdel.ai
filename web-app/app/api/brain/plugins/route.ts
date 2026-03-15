@@ -18,6 +18,16 @@ export interface McpPlugin {
 // In a real app, `isInstalled` state would be saved in a config file or DB.
 const MOCK_PLUGINS: McpPlugin[] = [
   {
+    id: "mcp-catapi",
+    name: "Cat API Clone",
+    description: "Your one-stop shop for Cats-as-a-Service, featuring seasonal and temporal cats.",
+    version: "1.0.0",
+    author: "Meowdel",
+    icon: "cat", // assuming lucide has a cat, if not it will fallback or we can use smile
+    isInstalled: true,
+    tags: ["Fun", "API"]
+  },
+  {
     id: "mcp-github",
     name: "GitHub Connector",
     description: "Read issues, pull requests, and commit history directly into your brain context.",

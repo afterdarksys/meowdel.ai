@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import ApiKeyManager from '@/components/ApiKeyManager'
 import GithubIntegration from '@/components/GithubIntegration'
+import { VoiceCatalog } from '@/components/voice-catalog'
 
 export default async function ProfilePage() {
     const cookieStore = await cookies()
@@ -170,6 +171,12 @@ export default async function ProfilePage() {
                 {/* API Key Manager Component */}
                 <ApiKeyManager />
                 
+                
+                {/* Voice Catalog Component */}
+                <div className="mt-8">
+                  <VoiceCatalog />
+                </div>
+
                 {/* GitHub Integration Component */}
                 <GithubIntegration />
             </div>

@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     // in a cross-platform way without custom Readable streams, we will buffer the zip 
     // into memory and return it. For massive vaults this isn't ideal, but it works for MVP.
 
-    return new Promise((resolve, reject) => {
+    return new Promise<NextResponse>((resolve, reject) => {
         const buffers: Buffer[] = []
         const archive = archiver('zip', {
             zlib: { level: 9 } // maximum compression

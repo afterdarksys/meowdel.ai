@@ -181,7 +181,7 @@
 ---
 
 ### Voice Notes
-**Status:** Not started
+**Status:** Implemented
 **Why:** Users want to capture thoughts on the go
 **Effort:** Medium
 **Value:** Medium
@@ -200,7 +200,7 @@
 ---
 
 ### Concept Clustering
-**Status:** Not started
+**Status:** Implemented
 **Why:** Detect duplicate/similar content
 **Effort:** Medium
 **Value:** Medium
@@ -244,7 +244,7 @@
 ---
 
 ### Timeline View
-**Status:** Not started
+**Status:** Implemented
 **Why:** See knowledge journey over time
 **Effort:** Medium
 **Value:** Medium
@@ -322,7 +322,7 @@
 ---
 
 ### Smart Export
-**Status:** Not started
+**Status:** Implemented
 **Why:** Users want to share/backup knowledge
 **Effort:** Medium
 **Value:** Medium
@@ -341,7 +341,7 @@
 ---
 
 ### Note Versioning
-**Status:** Not started
+**Status:** Implemented
 **Why:** Track changes over time
 **Effort:** High
 **Value:** Medium
@@ -386,7 +386,7 @@
 ---
 
 ### Animated Avatar
-**Status:** Purr audio exists, no visual avatar
+**Status:** Implemented
 **Why:** Delightful UX
 **Effort:** Medium
 **Value:** Low (brand value)
@@ -646,19 +646,19 @@
 - ✅ Mobile app
 
 **MEDIUM VALUE, LOW EFFORT:**
-- Timeline view
-- Voice notes
+- ✅ Timeline view
+- ✅ Voice notes
 - Smart reminders
 
 **MEDIUM VALUE, MEDIUM EFFORT:**
-- Concept clustering
-- Smart export
-- Note versioning
+- ✅ Concept clustering
+- ✅ Smart export
+- ✅ Note versioning
 
 **LOW VALUE (Deprioritize):**
 - Visual search
 - Code-to-note pipeline
-- Animated avatar (cute but not critical)
+- ✅ Animated avatar (cute but not critical)
 
 ---
 
