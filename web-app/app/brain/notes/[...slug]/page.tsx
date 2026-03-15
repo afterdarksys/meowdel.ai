@@ -12,6 +12,7 @@ export default function NotePage() {
   const slug = slugArray?.join('/')
 
   const [note, setNote] = useState<BrainNote | null>(null)
+  const [availableNotes, setAvailableNotes] = useState<BrainNote[]>([])
   const [loading, setLoading] = useState(true)
   const { setActiveContextNote, setChatOpen } = useGlobalChat()
 
@@ -19,12 +20,17 @@ export default function NotePage() {
     if (!slug) return
     setLoading(true)
     
-    fetch(`/api/brain/notes/${slugArray.map(encodeURIComponent).join('/')}`)
-      .then(res => res.json())
-      .then(data => {
-        if (!data.error) {
-          setNote(data)
-          setActiveContextNote(data) // Set global context
+    Promise.all([
+      fetch(`/api/brain/notes/${slugArray.map(encodeURIComponent).join('/')}`).then(res => res.json()),
+      fetch('/api/brain/notes').then(res => res.json())
+    ])
+      .then(([noteData, allNotesData]) => {
+        if (!noteData.error) {
+          setNote(noteData)
+          setActiveContextNote(noteData) // Set global context
+        }
+        if (!allNotesData.error && Array.isArray(allNotesData)) {
+          setAvailableNotes(allNotesData)
         }
         setLoading(false)
       })
@@ -48,6 +54,7 @@ export default function NotePage() {
       initialTitle={note.title} 
       slug={slug} 
       onOpenChat={() => setChatOpen(true)}
+      availableNotes={availableNotes}
     />
   )
 }

@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { Maximize, Minimize, RefreshCw, ZoomIn, ZoomOut } from 'lucide-react'
+import { Maximize, Minimize, RefreshCw, ZoomIn, ZoomOut, Activity } from 'lucide-react'
+import { GraphHealthPanel } from '@/components/graph-health-panel'
 
 // Import ForceGraph2D dynamically so it doesn't break SSR (depends on window)
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false })
@@ -12,6 +13,7 @@ export default function YarnBallPage() {
     const [graphData, setGraphData] = useState({ nodes: [], links: [] })
     const [loading, setLoading] = useState(true)
     const [isFullscreen, setIsFullscreen] = useState(false)
+    const [showHealthPanel, setShowHealthPanel] = useState(false)
     const containerRef = useRef<HTMLDivElement>(null)
     const fgRef = useRef<any>(null)
     const router = useRouter()
@@ -69,10 +71,19 @@ export default function YarnBallPage() {
                 <button onClick={fetchGraph} className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-white backdrop-blur-md">
                     <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin text-pink-500' : ''}`} />
                 </button>
+                <button onClick={() => setShowHealthPanel(!showHealthPanel)} className={`p-3 border rounded-xl backdrop-blur-md transition-colors ${showHealthPanel ? 'bg-white text-black border-white' : 'bg-white/10 hover:bg-white/20 border-white/20 text-white'}`}>
+                    <Activity className="w-5 h-5" />
+                </button>
                 <button onClick={toggleFullscreen} className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-white backdrop-blur-md">
                     {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
                 </button>
             </div>
+
+            {showHealthPanel && (
+              <div className="absolute top-24 right-6 z-30">
+                 <GraphHealthPanel />
+              </div>
+            )}
 
             <div className="absolute bottom-10 left-10 z-20 pointer-events-none">
                 <h1 className="text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-pink-400 to-purple-500">

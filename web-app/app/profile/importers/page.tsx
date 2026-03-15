@@ -1,36 +1,44 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Link from 'next/link'
-import { Apple, FileText, Database, RefreshCw, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react'
+import { FileText, Database, RefreshCw, CheckCircle2, AlertCircle, ArrowLeft, Upload, FileArchive } from 'lucide-react'
 
 export default function ImportersPage() {
     const [loadingPlatform, setLoadingPlatform] = useState<string | null>(null)
     const [result, setResult] = useState<any>(null)
     const [error, setError] = useState<string | null>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
-    const handleImport = async (platform: string, credentials?: any) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, platform: string) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
         setLoadingPlatform(platform)
         setError(null)
         setResult(null)
 
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('source', platform)
+
         try {
             const res = await fetch('/api/brain/import', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ platform, credentials })
+                body: formData
             })
             
             const data = await res.json()
             if (res.ok && data.success) {
-                setResult(data.result)
+                setResult(data)
             } else {
-                setError(data.error || 'Failed to import notes')
+                setError(data.error || 'Failed to import files')
             }
         } catch (err: any) {
             setError(err.message || 'An unexpected network error occurred')
         } finally {
             setLoadingPlatform(null)
+            if (fileInputRef.current) fileInputRef.current.value = ''
         }
     }
 
@@ -44,7 +52,7 @@ export default function ImportersPage() {
                     </Link>
                     <div>
                         <h1 className="text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-emerald-400 tracking-tight">
-                            External Importers
+                            Universal Importer
                         </h1>
                         <p className="text-gray-300 mt-2 font-medium">Ingest your brain data from other platforms seamlessly.</p>
                     </div>
@@ -65,98 +73,70 @@ export default function ImportersPage() {
                         <CheckCircle2 className="w-6 h-6 mr-3 shrink-0" />
                         <div>
                             <h4 className="font-bold">Import Successful</h4>
-                            <p className="text-sm opacity-80">Imported {result.successCount} of {result.total} items. Failed: {result.errorCount}. Return to chat to see your new knowledge!</p>
+                            <p className="text-sm opacity-80">{result.message} Return to chat to see your new knowledge!</p>
                         </div>
                     </div>
                 )}
 
+                {/* Hidden File Input */}
+                <input 
+                   type="file" 
+                   ref={fileInputRef} 
+                   className="hidden" 
+                   accept=".zip,.md,.txt" 
+                   onChange={(e) => handleFileChange(e, 'Generic')} 
+                />
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     
-                    {/* Apple Notes Card */}
-                    <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 shadow-xl relative overflow-hidden group">
+                    {/* Obsidian Card */}
+                    <div className="backdrop-blur-xl bg-purple-500/10 border border-purple-500/30 rounded-3xl p-8 shadow-xl relative overflow-hidden group hover:border-purple-500/50 transition-colors">
                         <div className="absolute top-0 right-0 p-4 opacity-10">
-                            <Apple className="w-32 h-32" />
+                            <Database className="w-32 h-32" />
                         </div>
                         <div className="flex items-center mb-4">
-                            <div className="p-3 bg-white text-black rounded-full mr-4 shadow-[0_0_15px_rgba(255,255,255,0.3)]">
-                                <Apple className="w-6 h-6" />
+                            <div className="p-3 bg-purple-500 text-white rounded-xl mr-4 shadow-[0_0_15px_rgba(168,85,247,0.4)]">
+                                <Database className="w-6 h-6" />
                             </div>
-                            <h2 className="text-2xl font-bold">Apple Notes</h2>
+                            <h2 className="text-2xl font-bold">Obsidian Vault</h2>
                         </div>
                         <p className="text-gray-400 text-sm mb-6 relative z-10 h-16">
-                            Native zero-configuration import. Meowdel will locally command your Mac via AppleScript to securely extract all Apple Notes into Markdown.
+                            Zip your entire Obsidian Vault directory and upload it here. We will ingest all markdown files and maintain your existing wikilinks.
                         </p>
                         
                         <button 
-                            onClick={() => handleImport('apple')}
+                            onClick={() => fileInputRef.current?.click()}
                             disabled={loadingPlatform !== null}
-                            className="w-full py-4 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white font-bold rounded-xl transition-all border border-white/20 flex items-center justify-center space-x-2 shadow-lg relative z-10"
+                            className="w-full py-4 bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-50 text-purple-200 font-bold rounded-xl transition-all border border-purple-500/50 flex items-center justify-center space-x-2 shadow-lg relative z-10"
                         >
-                            {loadingPlatform === 'apple' ? (
+                            {loadingPlatform === 'Generic' ? (
                                 <><RefreshCw className="w-5 h-5 animate-spin" /> <span>Extracting...</span></>
                             ) : (
-                                <span>Start Import</span>
+                                <><FileArchive className="w-5 h-5" /> <span>Upload Vault (.zip)</span></>
                             )}
                         </button>
                     </div>
 
                     {/* Notion Card */}
-                    <div className="backdrop-blur-xl bg-black/40 border border-white/10 rounded-3xl p-8 shadow-xl relative overflow-hidden opacity-50 cursor-not-allowed">
+                    <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 shadow-xl relative overflow-hidden group hover:border-white/20 transition-colors">
                         <div className="absolute top-0 right-0 p-4 opacity-10">
-                            <Database className="w-32 h-32" />
+                            <FileText className="w-32 h-32" />
                         </div>
                         <div className="flex items-center mb-4">
-                            <div className="p-3 bg-black border border-white/20 text-white rounded-xl mr-4">
-                                <span className="font-serif font-bold text-xl">N</span>
+                            <div className="p-3 bg-black border border-white/20 text-white rounded-xl mr-4 shadow-[0_0_15px_rgba(255,255,255,0.1)]">
+                                <span className="font-serif font-bold text-xl px-1">N</span>
                             </div>
-                            <h2 className="text-2xl font-bold">Notion</h2>
-                            <span className="ml-3 px-2 py-1 bg-white/10 rounded text-xs">Soon</span>
+                            <h2 className="text-2xl font-bold">Notion Export</h2>
                         </div>
                         <p className="text-gray-400 text-sm mb-6 relative z-10 h-16">
-                            Provide an Internal Integration Token to extract all pages from your Notion workspace into Meowdel.
+                            Export your Notion workspace as "Markdown & CSV", zip the folder, and upload it here to migrate your data.
                         </p>
-                        <button disabled className="w-full py-4 bg-white/5 text-gray-500 font-bold rounded-xl border border-white/5">
-                            Coming Soon
-                        </button>
-                    </div>
-
-                    {/* Google Docs/Keep Card */}
-                     <div className="backdrop-blur-xl bg-[#4285F4]/5 border border-[#4285F4]/20 rounded-3xl p-8 shadow-xl relative overflow-hidden opacity-50 cursor-not-allowed">
-                        <div className="absolute top-0 right-0 p-4 opacity-10">
-                            <FileText className="w-32 h-32 text-[#4285F4]" />
-                        </div>
-                        <div className="flex items-center mb-4">
-                            <div className="p-3 bg-white text-[#4285F4] rounded-xl mr-4 shadow-lg">
-                                <svg className="w-6 h-6" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.2,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.25,22C17.6,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z" /></svg>
-                            </div>
-                            <h2 className="text-2xl font-bold">Google</h2>
-                            <span className="ml-3 px-2 py-1 bg-[#4285F4]/20 text-[#4285F4] rounded text-xs">Soon</span>
-                        </div>
-                        <p className="text-gray-400 text-sm mb-6 relative z-10 h-16">
-                            Upload a Google Takeout export (.zip) to ingest your Google Keep notes and Google Docs securely without sending data to the cloud.
-                        </p>
-                        <button disabled className="w-full py-4 bg-[#4285F4]/10 text-[#4285F4]/50 font-bold rounded-xl border border-[#4285F4]/10">
-                            Coming Soon
-                        </button>
-                    </div>
-
-                    {/* Microsoft OneNote Card */}
-                    <div className="backdrop-blur-xl bg-[#7719AA]/5 border border-[#7719AA]/20 rounded-3xl p-8 shadow-xl relative overflow-hidden opacity-50 cursor-not-allowed">
-                        <div className="absolute top-0 right-0 p-4 opacity-10">
-                            <FileText className="w-32 h-32 text-[#7719AA]" />
-                        </div>
-                        <div className="flex items-center mb-4">
-                            <div className="p-3 bg-[#7719AA] text-white rounded-xl mr-4 shadow-lg shadow-[#7719AA]/50">
-                                <span className="font-bold">N</span>
-                            </div>
-                            <h2 className="text-2xl font-bold">OneNote</h2>
-                            <span className="ml-3 px-2 py-1 bg-[#7719AA]/20 text-[#7719AA] rounded text-xs">Soon</span>
-                        </div>
-                        <p className="text-gray-400 text-sm mb-6 relative z-10 h-16">
-                            Authenticate via Azure AD to index your personal or enterprise Microsoft OneNote notebooks.
-                        </p>
-                         <button disabled className="w-full py-4 bg-[#7719AA]/10 text-[#7719AA]/50 font-bold rounded-xl border border-[#7719AA]/10">
-                            Coming Soon
+                        <button 
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={loadingPlatform !== null}
+                            className="w-full py-4 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white font-bold rounded-xl transition-all border border-white/20 flex items-center justify-center space-x-2 shadow-lg relative z-10"
+                        >
+                            <Upload className="w-5 h-5" /> <span>Upload Export (.zip)</span>
                         </button>
                     </div>
 

@@ -6,9 +6,11 @@ export interface ShortcutHandlers {
   onToggleChat?: () => void
   onOpenSearch?: () => void
   onToggleZoomies?: () => void
+  onNewNote?: () => void
+  onOpenGraph?: () => void
 }
 
-export function useShortcuts({ onToggleChat, onOpenSearch, onToggleZoomies }: ShortcutHandlers) {
+export function useShortcuts({ onToggleChat, onOpenSearch, onToggleZoomies, onNewNote, onOpenGraph }: ShortcutHandlers) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Cmd/Ctrl + Shift + M for Chat
@@ -28,9 +30,21 @@ export function useShortcuts({ onToggleChat, onOpenSearch, onToggleZoomies }: Sh
         e.preventDefault()
         if (onToggleZoomies) onToggleZoomies()
       }
+      
+      // Cmd/Ctrl + Shift + N for New Note
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        if (onNewNote) onNewNote()
+      }
+      
+      // Cmd/Ctrl + Shift + G for Jump to Graph
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'g') {
+        e.preventDefault()
+        if (onOpenGraph) onOpenGraph()
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onToggleChat, onOpenSearch, onToggleZoomies])
+  }, [onToggleChat, onOpenSearch, onToggleZoomies, onNewNote, onOpenGraph])
 }

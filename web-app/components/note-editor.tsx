@@ -2,9 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { Save, Loader2, Link as LinkIcon, Sparkles, MessageSquare, Tags, Wand2 } from 'lucide-react'
+import { Save, Loader2, Link as LinkIcon, Sparkles, MessageSquare, Tags, Wand2, History } from 'lucide-react'
 import { TagManager } from '@/components/tag-manager'
+import { ConnectionSuggester } from '@/components/connection-suggester'
+import { VoiceRecorder } from '@/components/voice-recorder'
 import { BrainNote } from '@/app/api/brain/notes/route'
+import { InlineAiMenu } from '@/components/inline-ai-menu'
+import { VersionHistory } from '@/components/version-history'
+import { findLinkTrigger, fuzzyMatch } from '@/lib/link-suggester'
 
 // Dynamically import MDEditor with SSR disabled
 const MDEditor = dynamic(
@@ -19,9 +24,10 @@ export interface NoteEditorProps {
   slug: string
   onSave?: () => void
   onOpenChat?: () => void
+  availableNotes: BrainNote[]
 }
 
-export function NoteEditor({ initialContent, initialTitle, initialTags = [], slug, onSave, onOpenChat }: NoteEditorProps) {
+export function NoteEditor({ initialContent, initialTitle, initialTags = [], slug, onSave, onOpenChat, availableNotes = [] }: NoteEditorProps) {
   const [content, setContent] = useState(initialContent)
   const [title, setTitle] = useState(initialTitle)
   const [tags, setTags] = useState(initialTags)
@@ -30,7 +36,125 @@ export function NoteEditor({ initialContent, initialTitle, initialTags = [], slu
   const [isLinking, setIsLinking] = useState(false)
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [isAutoTagging, setIsAutoTagging] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+
+  // Link Suggestions State
+  const [suggestions, setSuggestions] = useState<BrainNote[]>([])
+  const [suggestionIndex, setSuggestionIndex] = useState(0)
+  const [suggestionQueryInfo, setSuggestionQueryInfo] = useState<{ query: string; startIndex: number } | null>(null)
   
+  // Inline AI State
+  const [selectedText, setSelectedText] = useState("")
+  const [selectionRange, setSelectionRange] = useState<[number, number] | null>(null)
+
+  useEffect(() => {
+    const handleSelection = () => {
+      const activeEl = document.activeElement as HTMLTextAreaElement
+      if (activeEl && activeEl.tagName === 'TEXTAREA') {
+        const text = activeEl.value.substring(activeEl.selectionStart, activeEl.selectionEnd)
+        if (text.trim().length > 5 && text.length < 2000) {
+           setSelectedText(text)
+           setSelectionRange([activeEl.selectionStart, activeEl.selectionEnd])
+        }
+      }
+    }
+    document.addEventListener('selectionchange', handleSelection)
+    return () => document.removeEventListener('selectionchange', handleSelection)
+  }, [])
+
+  const handleApplyAiTransformation = (newText: string) => {
+    if (selectionRange) {
+       const [start, end] = selectionRange
+       const before = content.slice(0, start)
+       const after = content.slice(end)
+       setContent(before + newText + after)
+       setSelectedText("")
+       setSelectionRange(null)
+    }
+  }
+
+  // Real-time suggestion check
+  const handleContentChange = (val: string | undefined) => {
+    const newContent = val || ''
+    setContent(newContent)
+
+    // A very simple approximation of cursor position by seeing where it differs
+    // Real implementation would track via editor ref, but MDEditor obscures it.
+    // For MVP, we'll use the end of the text.
+    // Actually, we can get cursor pos if MDEditor gives it, but it doesn't easily without refs.
+    // Let's assume the user is typing at the end of the content for this check.
+    const cursorPos = newContent.length
+    
+    const trigger = findLinkTrigger(newContent, cursorPos)
+    if (trigger && trigger.query.length >= 2) {
+      const query = trigger.query
+      const otherNotes = availableNotes.filter(n => n.slug !== slug)
+      
+      const matches = otherNotes.filter(n => 
+        fuzzyMatch(query, n.title) || fuzzyMatch(query, n.slug)
+      ).slice(0, 5) // Top 5
+
+      if (matches.length > 0) {
+        setSuggestions(matches)
+        setSuggestionQueryInfo(trigger)
+        setSuggestionIndex(0)
+      } else {
+        setSuggestions([])
+        setSuggestionQueryInfo(null)
+      }
+    } else {
+      setSuggestions([])
+      setSuggestionQueryInfo(null)
+    }
+  }
+
+  const applySuggestion = (note: BrainNote) => {
+    if (!suggestionQueryInfo) return
+    const { startIndex, query } = suggestionQueryInfo
+    
+    // Replace the query text with the exact link
+    const before = content.slice(0, startIndex)
+    const after = content.slice(startIndex + query.length)
+    
+    // If we're already inside `[[`, don't add them again
+    const linkText = `[[${note.slug}]]`
+    
+    setContent(before + linkText + after)
+    setSuggestions([])
+    setSuggestionQueryInfo(null)
+  }
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSuggestionIndex(i => (i + 1) % suggestions.length)
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSuggestionIndex(i => (i - 1 + suggestions.length) % suggestions.length)
+      } else if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault()
+        applySuggestion(suggestions[suggestionIndex])
+      } else if (e.key === 'Escape') {
+        setSuggestions([])
+      }
+      return // Stop processing if suggestions are open
+    }
+
+    // Save
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault()
+      handleSave()
+      return
+    }
+
+    // Quick Link
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'l') {
+      e.preventDefault()
+      handleAutoLink()
+      return
+    }
+  }
   const handleAutoLink = async () => {
     setIsLinking(true)
     try {
@@ -125,6 +249,18 @@ export function NoteEditor({ initialContent, initialTitle, initialTags = [], slu
     setIsSaving(true)
     try {
       const parts = slug.split('/')
+      
+      // Save version snapshot first
+      try {
+         await fetch('/api/brain/versions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slug, content })
+         })
+      } catch (e) {
+         console.error("Failed to snapshot version", e)
+      }
+
       await fetch(`/api/brain/notes/${parts.map(encodeURIComponent).join('/')}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -155,6 +291,14 @@ export function NoteEditor({ initialContent, initialTitle, initialTags = [], slu
           />
           <div className="flex items-center gap-4 text-sm text-muted-foreground ml-4 flex-shrink-0">
             {lastSaved && <span>Saved {lastSaved.toLocaleTimeString()}</span>}
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors border ${showHistory ? 'bg-primary text-primary-foreground border-primary' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}
+              title="View Version History"
+            >
+              <History className="w-4 h-4" />
+              <span className="hidden md:inline">History</span>
+            </button>
             <button
               onClick={onOpenChat}
               className="flex items-center gap-2 px-3 py-1.5 bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-md transition-colors border"
@@ -190,6 +334,12 @@ export function NoteEditor({ initialContent, initialTitle, initialTags = [], slu
               {isSummarizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
               <span className="hidden md:inline">Summarize</span>
             </button>
+            <VoiceRecorder 
+              disabled={isSaving}
+              onTranscription={(text) => {
+                 setContent(prev => prev + (prev.endsWith('\n\n') || prev === '' ? text : `\n\n${text}`))
+              }}
+            />
             <button
               onClick={handleSave}
               disabled={isSaving}
@@ -206,7 +356,8 @@ export function NoteEditor({ initialContent, initialTitle, initialTags = [], slu
       <div className="flex-1 overflow-hidden relative">
         <MDEditor
           value={content}
-          onChange={(val) => setContent(val || '')}
+          onChange={handleContentChange}
+          onKeyDown={handleEditorKeyDown}
           height="100%"
           className="border-none !rounded-none"
           previewOptions={{
@@ -214,7 +365,63 @@ export function NoteEditor({ initialContent, initialTitle, initialTags = [], slu
           }}
           style={{ height: '100%' }}
         />
+        
+        {/* Suggestion Tooltip Overlay */}
+        {suggestions.length > 0 && (
+          <div className="absolute right-8 bottom-8 z-50 bg-popover text-popover-foreground border shadow-lg rounded-md p-1 w-64 animate-in fade-in slide-in-from-bottom-2">
+            <div className="text-xs text-muted-foreground px-2 py-1.5 font-medium border-b mb-1 flex items-center justify-between">
+              <span>Link Suggestions</span>
+              <span className="text-[10px] bg-muted px-1 rounded">Tab to accept</span>
+            </div>
+            {suggestions.map((note, i) => (
+              <button
+                key={note.slug}
+                onClick={() => applySuggestion(note)}
+                className={`w-full text-left px-2 py-1.5 text-sm rounded-sm flex flex-col transition-colors ${i === suggestionIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'}`}
+              >
+                <span className="font-medium truncate">{note.title}</span>
+                {note.tags && note.tags.length > 0 && (
+                   <span className="text-[10px] text-muted-foreground truncate opacity-80">
+                      {note.tags.join(', ')}
+                   </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
+      <ConnectionSuggester 
+        slug={slug} 
+        onAddLink={(targetSlug) => {
+          setContent(prev => prev + `\n\n[[${targetSlug}]]`)
+        }} 
+      />
+      {selectedText && (
+         <InlineAiMenu 
+           selectedText={selectedText}
+           context={content}
+           onApply={handleApplyAiTransformation}
+           onCancel={() => {
+              setSelectedText("")
+              setSelectionRange(null)
+           }}
+         />
+      )}
+      
+      {showHistory && (
+         <div className="absolute right-0 top-16 bottom-0 z-20">
+            <VersionHistory 
+               slug={slug}
+               currentContent={content}
+               onClose={() => setShowHistory(false)}
+               onRestore={(oldContent) => {
+                  setContent(oldContent)
+                  // Show unsaved indicator
+                  setLastSaved(null)
+               }}
+            />
+         </div>
+      )}
     </div>
   )
 }

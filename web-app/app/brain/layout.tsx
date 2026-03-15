@@ -1,11 +1,13 @@
 "use client"
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
 import { AskMeowdel } from "@/components/ask-meowdel"
 import { BrainChatPanel } from "@/components/brain-chat-panel"
 import { CommandPalette } from "@/components/command-palette"
 import { useGlobalChat } from "@/lib/chat-context"
 import { useShortcuts } from "@/lib/use-shortcuts"
+import { MeowdelAvatar } from "@/components/meowdel-avatar"
 
 export default function BrainLayout({
   children,
@@ -14,6 +16,7 @@ export default function BrainLayout({
 }) {
   const { isChatOpen, setChatOpen, toggleChat, activeContextNote, isZoomies, setZoomies } = useGlobalChat()
   const [searchOpen, setSearchOpen] = useState(false)
+  const router = useRouter()
 
   // Register global shortcuts
   useShortcuts({
@@ -24,7 +27,18 @@ export default function BrainLayout({
          if (!isZoomies) {
              setChatOpen(true) // Zoomies implies talking to chat aggressively
          }
-     }
+     },
+     onNewNote: () => {
+         // Generate a blank new note
+         fetch('/api/brain/notes', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ title: `Untitled Note ${Date.now()}`, content: '' })
+         }).then(res => res.json()).then(data => {
+             if (data.slug) router.push(`/brain/notes/${data.slug}`)
+         })
+     },
+     onOpenGraph: () => router.push('/brain/yarn')
   })
 
   return (
@@ -44,6 +58,7 @@ export default function BrainLayout({
       </main>
       <CommandPalette isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
       <BrainChatPanel isOpen={isChatOpen} onClose={() => setChatOpen(false)} activeNote={activeContextNote} />
+      <MeowdelAvatar />
     </div>
   )
 }

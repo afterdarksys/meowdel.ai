@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Sparkles, MessageSquare, X, Send, Loader2, Paperclip, FileText, Cat, UserRound } from 'lucide-react'
+import { Sparkles, MessageSquare, X, Send, Loader2, Paperclip, FileText, Cat, UserRound, Save } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { useDropzone } from 'react-dropzone'
 import { BrainNote } from '@/app/api/brain/notes/route'
 import { useSettings } from '@/lib/settings-context'
@@ -21,10 +22,33 @@ export function BrainChatPanel({ activeNote, isOpen, onClose }: BrainChatPanelPr
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const router = useRouter()
   
   const { brainPersonality, setBrainPersonality } = useSettings()
   const { isZoomies } = useGlobalChat()
+
+  const handleExportChat = async () => {
+    if (messages.length === 0) return
+    setIsExporting(true)
+    try {
+      const res = await fetch('/api/brain/export-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages })
+      })
+      const data = await res.json()
+      if (data.slug) {
+         router.push(`/brain/notes/${data.slug}`)
+         onClose()
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return
@@ -192,6 +216,16 @@ export function BrainChatPanel({ activeNote, isOpen, onClose }: BrainChatPanelPr
           <span>{brainPersonality === 'cat' ? 'Ask Meowdel' : 'Ask AI'}</span>
         </div>
         <div className="flex items-center gap-1">
+          {messages.length > 0 && (
+             <button
+               onClick={handleExportChat}
+               disabled={isExporting}
+               className="p-1.5 hover:bg-secondary rounded-md text-muted-foreground transition-colors mr-1"
+               title="Save Chat to Note"
+             >
+               {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-primary" />}
+             </button>
+          )}
           <button 
             onClick={() => setBrainPersonality(brainPersonality === 'cat' ? 'regular' : 'cat')}
             className="p-1.5 hover:bg-secondary rounded-md text-muted-foreground transition-colors mr-1"
