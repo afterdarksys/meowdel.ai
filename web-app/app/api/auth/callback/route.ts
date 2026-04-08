@@ -73,8 +73,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Extract employee benefits for persistence
-    const employeeBenefits = isAfterDarkEmployee(userInfo.email) ? {
+    // Extract employee benefits for persistence (use type guard for TypeScript)
+    const employeeBenefits = 'subscriptionTier' in enhancedUserInfo ? {
       subscriptionTier: enhancedUserInfo.subscriptionTier,
       subscriptionStatus: enhancedUserInfo.subscriptionStatus,
       role: enhancedUserInfo.role,
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
 
     console.log('[OAuth2] OAuth account linked successfully')
 
-    if (isAfterDarkEmployee(userInfo.email)) {
+    if ('subscriptionTier' in enhancedUserInfo) {
       console.log('[OAuth2] Employee benefits granted:', {
         email: userInfo.email,
         tier: enhancedUserInfo.subscriptionTier,

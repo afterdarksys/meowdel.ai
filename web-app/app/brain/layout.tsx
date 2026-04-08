@@ -1,10 +1,11 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
 import { AskMeowdel } from "@/components/ask-meowdel"
 import { BrainChatPanel } from "@/components/brain-chat-panel"
 import { CommandPalette } from "@/components/command-palette"
+import { KeyboardShortcutsModal } from "@/components/keyboard-shortcuts-modal"
 import { useGlobalChat } from "@/lib/chat-context"
 import { useShortcuts } from "@/lib/use-shortcuts"
 import { MeowdelAvatar } from "@/components/meowdel-avatar"
@@ -16,7 +17,22 @@ export default function BrainLayout({
 }) {
   const { isChatOpen, setChatOpen, toggleChat, activeContextNote, isZoomies, setZoomies } = useGlobalChat()
   const [searchOpen, setSearchOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const router = useRouter()
+
+  // '?' key opens shortcuts modal (when not typing in an input)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      const editable = (e.target as HTMLElement).contentEditable === 'true'
+      if (e.key === '?' && tag !== 'INPUT' && tag !== 'TEXTAREA' && !editable) {
+        e.preventDefault()
+        setShortcutsOpen(v => !v)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   // Register global shortcuts
   useShortcuts({
@@ -58,6 +74,7 @@ export default function BrainLayout({
       </main>
       <CommandPalette isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
       <BrainChatPanel isOpen={isChatOpen} onClose={() => setChatOpen(false)} activeNote={activeContextNote} />
+      <KeyboardShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <MeowdelAvatar />
     </div>
   )

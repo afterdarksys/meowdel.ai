@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Brain, FileCode, Network, Plus, Settings, Search, Hash, Activity, Plug, FileQuestion, ChevronDown, ChevronRight, FileText, MoonStar, Loader2, Image as ImageIcon } from "lucide-react"
+import { Brain, FileCode, Network, Plus, Settings, Activity, Plug, FileQuestion, ChevronDown, ChevronRight, FileText, MoonStar, Loader2, Image as ImageIcon, Upload, GraduationCap, Zap, Bot, ScanSearch, KeyRound } from "lucide-react"
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -59,10 +59,15 @@ export function Sidebar() {
 
   const navItems = [
     { icon: Brain, label: "Brain Home", href: "/brain" },
-    { icon: Network, label: "Knowledge Graph", href: "/brain/yarn" },
-    { icon: FileQuestion, label: "Orphans", href: "/brain/orphans" },
     { icon: FileCode, label: "All Notes", href: "/brain/notes" },
+    { icon: Network, label: "Knowledge Graph", href: "/brain/yarn" },
+    { icon: GraduationCap, label: "Flashcards", href: "/brain/flashcards" },
+    { icon: Bot, label: "Workflows", href: "/brain/workflows" },
+    { icon: Zap, label: "Skills", href: "/brain/skills" },
+    { icon: ScanSearch, label: "Code Review", href: "/brain/code-review" },
+    { icon: Upload, label: "Import", href: "/brain/import" },
     { icon: ImageIcon, label: "Visual Search", href: "/brain/visual-search" },
+    { icon: FileQuestion, label: "Orphans", href: "/brain/orphans" },
   ]
 
   return (
@@ -161,7 +166,16 @@ export function Sidebar() {
             <Activity className="w-4 h-4" />
             Analytics
           </Link>
-          <Link 
+          <Link
+            href="/brain/integrations"
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+              pathname === '/brain/integrations' ? 'bg-primary/10 text-primary' : 'hover:bg-secondary text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Zap className="w-4 h-4" />
+            Integrations
+          </Link>
+          <Link
             href="/brain/plugins"
             className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
               pathname === '/brain/plugins' ? 'bg-primary/10 text-primary' : 'hover:bg-secondary text-muted-foreground hover:text-foreground'
@@ -170,9 +184,31 @@ export function Sidebar() {
             <Plug className="w-4 h-4" />
             Extensions (MCP)
           </Link>
-          <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors mt-1">
+          <Link
+            href="/brain/api-keys"
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+              pathname === '/brain/api-keys' ? 'bg-primary/10 text-primary' : 'hover:bg-secondary text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <KeyRound className="w-4 h-4" />
+            API Keys
+          </Link>
+          <Link
+            href="/brain/settings"
+            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+              pathname === '/brain/settings' ? 'bg-primary/10 text-primary' : 'hover:bg-secondary text-muted-foreground hover:text-foreground'
+            }`}
+          >
             <Settings className="w-4 h-4" />
             Settings
+          </Link>
+          <button
+            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }))}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full text-left hover:bg-secondary text-muted-foreground hover:text-foreground"
+            title="Keyboard shortcuts (?)"
+          >
+            <span className="w-4 h-4 flex items-center justify-center text-xs font-bold border border-current rounded">?</span>
+            Shortcuts
           </button>
         </div>
     </aside>

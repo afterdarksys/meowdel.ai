@@ -1,0 +1,29 @@
+{
+  "name": "meowdel-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Meowdel AI — chat, brain search, notes, workflows, and code review",
+  "main": "dist/index.js",
+  "bin": {
+    "meowdel-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["mcp", "meowdel", "ai", "claude", "brain", "notes"],
+  "author": "After Dark Systems",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

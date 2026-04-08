@@ -1,5 +1,14 @@
 FROM node:22-slim AS base
 
+# Install system tools needed at runtime (Python for code-review-graph, git for repo cloning)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+# Install code-review-graph into isolated venv so it doesn't conflict with system packages
+RUN python3 -m venv /opt/crg-venv \
+    && /opt/crg-venv/bin/pip install --no-cache-dir code-review-graph
+ENV CRG_BIN=/opt/crg-venv/bin/code-review-graph
+
 # Install dependencies only when needed
 FROM base AS deps
 WORKDIR /app

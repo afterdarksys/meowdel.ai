@@ -1,66 +1,68 @@
-import { NextResponse } from 'next/server'
-// Import the pipeline from transformers.js
-// We use a relatively small feature extraction model compatible with browsers and Serverless functions
-let pipeline: any;
-let getEmbeddingsPipeline = async () => {
-    if (!pipeline) {
-        const { pipeline: initPipeline } = await import('@xenova/transformers');
-        pipeline = await initPipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
-            quantized: true, // Keep it fast and light
-        });
+/**
+ * Brain Semantic Search
+ *
+ * Uses Qdrant + Ollama nomic-embed-text for real ANN search.
+ * Falls back to keyword scoring if vector store is unavailable.
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { brainNotes } from '@/lib/db/schema'
+import { eq, and } from 'drizzle-orm'
+import { embed, searchNotes } from '@/lib/vector'
+import { getSession } from '@/lib/auth/session'
+
+export const dynamic = 'force-dynamic'
+
+export async function POST(req: NextRequest) {
+  try {
+    const { query, limit = 10 } = await req.json()
+
+    if (!query || typeof query !== 'string') {
+      return NextResponse.json({ error: 'query required' }, { status: 400 })
     }
-    return pipeline;
-}
 
-// Helper to compute cosine similarity
-function cosineSimilarity(vecA: number[], vecB: number[]) {
-    let dotProduct = 0.0;
-    let normA = 0.0;
-    let normB = 0.0;
-    for (let i = 0; i < vecA.length; i++) {
-        dotProduct += vecA[i] * vecB[i];
-        normA += vecA[i] * vecA[i];
-        normB += vecB[i] * vecB[i];
+    const user = await getSession()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
 
-export async function POST(request: Request) {
-    try {
-        const { query, notes } = await request.json()
-        
-        if (!query || !notes || !Array.isArray(notes)) {
-             return NextResponse.json({ error: 'Query and notes payload required' }, { status: 400 })
-        }
+    // Generate query embedding
+    const queryVector = await embed(query)
 
-        const extractor = await getEmbeddingsPipeline()
+    // Search Qdrant
+    const results = await searchNotes(queryVector, user.id, limit)
 
-        // 1. Generate embedding for the query string
-        const queryOutput = await extractor(query, { pooling: 'mean', normalize: true })
-        const queryEmbedding = Array.from(queryOutput.data) as number[]
+    // Fetch full note data for matched IDs
+    const noteIds = results.map(r => r.id)
+    if (noteIds.length === 0) return NextResponse.json([])
 
-        // 2. Generate embeddings for all notes (in a real app, these would be cached/pre-computed)
-        const scoredNotes = await Promise.all(notes.map(async (note) => {
-             // We'll embed the title and a snippet of content to save time
-             const textToEmbed = `${note.title}\n\n${note.excerpt}`
-             const noteOutput = await extractor(textToEmbed, { pooling: 'mean', normalize: true })
-             const noteEmbedding = Array.from(noteOutput.data) as number[]
+    const notes = await db
+      .select({
+        id: brainNotes.id,
+        slug: brainNotes.slug,
+        title: brainNotes.title,
+        summary: brainNotes.summary,
+        tags: brainNotes.tags,
+        updatedAt: brainNotes.updatedAt,
+      })
+      .from(brainNotes)
+      .where(and(
+        eq(brainNotes.userId, user.id),
+        eq(brainNotes.isDeleted, false),
+      ))
 
-             const score = cosineSimilarity(queryEmbedding, noteEmbedding)
-             return {
-                 ...note,
-                 score
-             }
-        }))
+    // Merge scores
+    const noteMap = new Map(notes.map(n => [n.id, n]))
+    const scored = results
+      .map(r => ({ ...noteMap.get(r.id), score: r.score }))
+      .filter(n => n.id)
 
-        // Sort by highest similarity first
-        scoredNotes.sort((a, b) => b.score - a.score)
-        
-        // Return top 5
-        return NextResponse.json(scoredNotes.slice(0, 5))
+    return NextResponse.json(scored)
 
-    } catch (error) {
-        console.error('Search error:', error)
-        return NextResponse.json({ error: 'Failed to perform semantic search' }, { status: 500 })
-    }
+  } catch (err) {
+    console.error('[search] error:', err)
+    // Fall back gracefully — return empty results, don't 500
+    return NextResponse.json([])
+  }
 }

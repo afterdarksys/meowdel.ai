@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from 'react'
-import { BrainNote } from '@/app/api/brain/notes/route'
+import type { BrainNote } from '@/app/api/brain/notes/route'
 import { Brain, Layers, Link as LinkIcon, Hash, Search, ArrowUpRight, BarChart3, TrendingUp, Compass, ChevronRight } from "lucide-react"
 import Link from 'next/link'
 import { ActivityHeatmap } from '@/components/activity-heatmap'
@@ -31,19 +31,9 @@ export default function AnalyticsPage() {
   })
   const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1])
 
-  // 2. Connection Discovery (finding orphaned notes)
-  const allLinks = new Set<string>()
-  notes.forEach(note => {
-    const wikiLinkRegex = /\[\[(.*?)\]\]/g
-    const matches = Array.from(note.content.matchAll(wikiLinkRegex))
-    matches.forEach(match => {
-        const [page] = match[1].split('|')
-        const slug = page.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
-        allLinks.add(slug)
-    })
-  })
-  
-  const orphanedNotes = notes.filter(n => !allLinks.has(n.slug) && n.content.indexOf('[[') === -1)
+  // 2. Connection Discovery — list endpoint no longer returns content for performance.
+  // Orphan detection now relies on summary presence as a proxy.
+  const orphanedNotes = notes.filter(n => !n.summary)
   const connectedNotes = notes.length - orphanedNotes.length
 
   // Placeholder for categories, as it's used in the new snippet but not defined in the original
@@ -105,7 +95,7 @@ export default function AnalyticsPage() {
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
                <TrendingUp className="w-5 h-5 text-indigo-500" /> Activity
             </h2>
-            <ActivityHeatmap notes={notes} />
+            <ActivityHeatmap year={new Date().getFullYear()} />
          </div>
 
          {/* Gamification Panel */}
@@ -145,7 +135,7 @@ export default function AnalyticsPage() {
                 className="block p-3 rounded-lg border border-destructive/20 bg-destructive/5 hover:border-destructive/50 transition-colors"
               >
                 <div className="font-medium text-foreground mb-1">{note.title}</div>
-                <div className="text-xs text-muted-foreground line-clamp-1">{note.excerpt}</div>
+                <div className="text-xs text-muted-foreground line-clamp-1">{note.summary ?? 'No summary yet'}</div>
               </Link>
             ))}
           </div>

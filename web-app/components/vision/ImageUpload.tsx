@@ -40,7 +40,6 @@ export default function ImageUpload({ onAnalysis, disabled }: ImageUploadProps) 
           image: base64,
           prompt: 'Look at this image and tell me what you see, as Meowdel the cat!',
           source: 'upload',
-          userId: 'demo-user', // TODO: Get from session
         }),
       })
 

@@ -29,7 +29,7 @@ function NoteNode({ data }: { data: any }) {
          <h3 className="font-bold text-sm truncate">{data.title}</h3>
       </div>
       <p className="text-xs text-muted-foreground line-clamp-4 leading-relaxed">
-         {data.excerpt || "No content summary available."}
+         {data.summary || "No content summary available."}
       </p>
       {data.tags && data.tags.length > 0 && (
          <div className="flex gap-1 mt-3 overflow-hidden">
@@ -74,7 +74,7 @@ export function InfiniteCanvas() {
               id: note.slug,
               type: 'noteNote',
               position: { x: col * 320 + 100, y: row * 250 + 100 },
-              data: { title: note.title, excerpt: note.excerpt, tags: note.tags }
+              data: { title: note.title, excerpt: note.summary ?? "", tags: note.tags }
             }
         })
         
@@ -120,7 +120,7 @@ export function InfiniteCanvas() {
         id: randomNote.slug,
         type: 'noteNote',
         position: { x: Math.random() * 400 + 100, y: Math.random() * 400 + 100 },
-        data: { title: randomNote.title, excerpt: randomNote.excerpt, tags: randomNote.tags }
+        data: { title: randomNote.title, excerpt: randomNote.summary ?? "", tags: randomNote.tags }
      }
      
      setNodes(nds => [...nds, newNode])

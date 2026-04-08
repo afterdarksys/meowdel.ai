@@ -129,7 +129,6 @@ export default function WebcamCapture({
           image: frameData,
           prompt: '*looks at you through camera* How are you doing, hooman?',
           source: 'webcam',
-          userId: 'demo-user', // TODO: Get from session
         }),
       })
 

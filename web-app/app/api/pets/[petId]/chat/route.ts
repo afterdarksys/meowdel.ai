@@ -3,6 +3,10 @@ import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { getPersonalityById } from '@/lib/personality/engine'
 import { searchBrain } from '@/lib/brain/rag'
+import { getSession } from '@/lib/auth/session'
+import { route } from '@/lib/intelligence/router'
+import { readCascadeContext, writeCascadeMemory } from '@/lib/intelligence/cascade'
+import { resolveSkills, buildSkillPrompt, escalateTierForSkills } from '@/lib/intelligence/skills'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -71,53 +75,78 @@ export async function POST(
       )
     }
 
-    const { message, conversationHistory, userId, apiKey } = validationResult.data
+    const { message, conversationHistory, userId: bodyUserId, apiKey } = validationResult.data
 
     // 3. Authenticate & Rate Limit
-    const identifier = apiKey || userId || request.headers.get('x-forwarded-for') || 'anonymous';
-    // Limit: 20 requests per minute
+    const session = await getSession()
+    const identifier = session?.id || apiKey || bodyUserId || request.headers.get('x-forwarded-for') || 'anonymous'
     if (!checkRateLimit(identifier, 20, 60000)) {
-      return NextResponse.json({ error: 'Rate limit exceeded. Please try again later.' }, { status: 429 });
+      return NextResponse.json({ error: 'Rate limit exceeded. Please try again later.' }, { status: 429 })
     }
 
-    // 4. Brain RAG Context Retrieval
-    const brainSnippets = await searchBrain(message)
-    let finalPrompt = message
+    // 4. Route to model tier + parse user commands
+    const { tier, model, reason, command } = route(message, conversationHistory)
+    const cleanMessage = command.cleanMessage || message
+
+    // 4a. Resolve active skills and potentially escalate tier
+    const activeSkills = resolveSkills(command.activeSkillSlugs)
+    const finalTier = escalateTierForSkills(tier, activeSkills)
+    const finalModel = finalTier !== tier
+      ? (await import('@/lib/intelligence/router')).MODELS[finalTier]
+      : model
+
+    // 5. Fetch cascade memory + brain RAG in parallel
+    const [cascadeCtx, brainSnippets] = await Promise.all([
+      session ? readCascadeContext(session.id, finalTier, cleanMessage) : Promise.resolve({ memories: [], formatted: '' }),
+      searchBrain(cleanMessage),
+    ])
+
+    // 6. Build prompt with all context
+    let finalPrompt = cleanMessage
     if (brainSnippets.length > 0) {
       const contextXML = brainSnippets.map(doc => `<document id="${doc.id}">\n${doc.content}\n</document>`).join('\n\n')
-      finalPrompt = `${message}\n\n<brain_context>\n${contextXML}\n</brain_context>`
+      finalPrompt += `\n\n<brain_context>\n${contextXML}\n</brain_context>`
     }
 
-    // 5. Build messages array for Claude
+    // Build system prompt = personality + cascade memories + active skills
+    const skillPrompt = buildSkillPrompt(activeSkills)
+    const systemPrompt = personality.systemPrompt
+      + (cascadeCtx.formatted ? `\n\n${cascadeCtx.formatted}` : '')
+      + skillPrompt
+
+    // 7. Build messages array
     const messages: Anthropic.MessageParam[] = [
-      ...conversationHistory.map((msg: { role: string, content: string }) => ({
+      ...conversationHistory.map((msg: { role: string; content: string }) => ({
         role: msg.role as 'user' | 'assistant',
-        content: msg.content
+        content: msg.content,
       })),
-      {
-        role: 'user' as const,
-        content: finalPrompt
-      }
+      { role: 'user' as const, content: finalPrompt },
     ]
 
-    // 6. Call Claude API With Personality
+    // 8. Call Claude with routed model
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 1024,
-      system: personality.systemPrompt,
+      model: finalModel,
+      max_tokens: finalTier === 'haiku' ? 512 : finalTier === 'opus' ? 4096 : 1024,
+      system: systemPrompt,
       messages,
     })
 
-    const assistantMessage = response.content[0].type === 'text'
-      ? response.content[0].text
-      : ''
+    const assistantMessage = response.content[0].type === 'text' ? response.content[0].text : ''
 
-    // 7. Select appropriate photo
-    const hasCode = message.match(/```|function|const|let|var|class|def|import/)
-    const photo = personality.selectPhoto({
-      hasCode: !!hasCode,
-      activity: hasCode ? 'coding' : undefined
-    })
+    // 9. Store cascade memory (async, don't await — don't slow down response)
+    if (session) {
+      writeCascadeMemory({
+        userId: session.id,
+        tier: finalTier,
+        userMessage: cleanMessage,
+        assistantResponse: assistantMessage,
+        saveToCascade: command.saveToCascade,
+      }).catch(() => {})
+    }
+
+    // 10. Select photo
+    const hasCode = cleanMessage.match(/```|function|const|let|var|class|def|import/)
+    const photo = personality.selectPhoto({ hasCode: !!hasCode, activity: hasCode ? 'coding' : undefined })
 
     return NextResponse.json({
       success: true,
@@ -126,8 +155,16 @@ export async function POST(
         petId: personality.id,
         petName: personality.name,
         photo,
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+        // Expose routing metadata to clients
+        _routing: {
+          tier: finalTier,
+          model: finalModel,
+          reason,
+          activeSkills: activeSkills.map(s => s.slug),
+          cascadeMemoriesUsed: cascadeCtx.memories.length,
+        },
+      },
     })
 
   } catch (error) {

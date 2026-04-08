@@ -497,3 +497,344 @@ export const browseridSolvedProblems = pgTable('browserid_solved_problems', {
 }, (table) => [
   index('browserid_solved_problems_browser_idx').on(table.browserID, table.solvedAt),
 ])
+
+// ============================================
+// BRAIN — KNOWLEDGE MANAGEMENT
+// ============================================
+
+export const brainWorkspaces = pgTable('brain_workspaces', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 255 }).notNull(),
+  isPersonal: boolean('is_personal').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('brain_workspaces_slug_idx').on(table.slug),
+  index('brain_workspaces_owner_idx').on(table.ownerId),
+])
+
+export const brainWorkspaceMembers = pgTable('brain_workspace_members', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').references(() => brainWorkspaces.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  role: varchar('role', { length: 50 }).default('viewer').notNull(), // owner | editor | viewer
+  joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('brain_workspace_members_idx').on(table.workspaceId, table.userId),
+  index('brain_workspace_members_user_idx').on(table.userId),
+])
+
+export const brainNotes = pgTable('brain_notes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  workspaceId: uuid('workspace_id').references(() => brainWorkspaces.id, { onDelete: 'set null' }),
+
+  // Content
+  slug: varchar('slug', { length: 500 }).notNull(),
+  title: varchar('title', { length: 500 }).notNull(),
+  content: text('content').notNull().default(''),
+  frontmatter: jsonb('frontmatter').default({}),
+  tags: text('tags').array().default([]),
+
+  // AI-generated
+  summary: text('summary'),
+  keyConcepts: jsonb('key_concepts').default([]),
+
+  // Stats
+  wordCount: integer('word_count').default(0).notNull(),
+  viewCount: integer('view_count').default(0).notNull(),
+
+  // State
+  isPublic: boolean('is_public').default(false).notNull(),
+  isArchived: boolean('is_archived').default(false).notNull(),
+  isDeleted: boolean('is_deleted').default(false).notNull(),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => [
+  index('brain_notes_user_updated_idx').on(table.userId, table.updatedAt),
+  uniqueIndex('brain_notes_user_slug_idx').on(table.userId, table.slug),
+  index('brain_notes_workspace_idx').on(table.workspaceId),
+  index('brain_notes_tags_idx').on(table.tags),
+])
+
+export const brainNoteVersions = pgTable('brain_note_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  noteId: uuid('note_id').references(() => brainNotes.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+
+  content: text('content').notNull(),
+  title: varchar('title', { length: 500 }).notNull(),
+  tags: text('tags').array().default([]),
+
+  versionNumber: integer('version_number').notNull(),
+  // 'user' | 'ai_agent'
+  authorType: varchar('author_type', { length: 20 }).default('user').notNull(),
+  agentName: varchar('agent_name', { length: 100 }),
+  changeSummary: text('change_summary'),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('brain_note_versions_note_idx').on(table.noteId, table.versionNumber),
+])
+
+export const brainLinks = pgTable('brain_links', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sourceNoteId: uuid('source_note_id').references(() => brainNotes.id, { onDelete: 'cascade' }).notNull(),
+  targetNoteId: uuid('target_note_id').references(() => brainNotes.id, { onDelete: 'cascade' }).notNull(),
+  linkText: varchar('link_text', { length: 500 }),
+  isAutoLinked: boolean('is_auto_linked').default(false).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('brain_links_source_target_idx').on(table.sourceNoteId, table.targetNoteId),
+  index('brain_links_target_idx').on(table.targetNoteId),
+])
+
+// Embeddings stored as JSON until pgvector extension is enabled.
+// To enable: run `CREATE EXTENSION IF NOT EXISTS vector;` in Neon, then
+// migrate this column to a native vector type via Drizzle migration.
+export const brainEmbeddings = pgTable('brain_embeddings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  noteId: uuid('note_id').references(() => brainNotes.id, { onDelete: 'cascade' }).notNull().unique(),
+  embeddingJson: jsonb('embedding_json').notNull(),
+  model: varchar('model', { length: 100 }).default('claude-embed').notNull(),
+  dimensions: integer('dimensions').default(1536).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('brain_embeddings_note_idx').on(table.noteId),
+])
+
+// ============================================
+// AGENT JOBS — RUFLO TASK QUEUE
+// ============================================
+
+export const agentJobs = pgTable('agent_jobs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+
+  // 'summarize_note' | 'embed_note' | 'auto_link' | 'generate_note' | 'hive_mind_task'
+  jobType: varchar('job_type', { length: 100 }).notNull(),
+  agentName: varchar('agent_name', { length: 100 }),
+  payload: jsonb('payload').notNull().default({}),
+
+  result: jsonb('result'),
+  errorMessage: text('error_message'),
+
+  // 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+  status: varchar('status', { length: 50 }).default('pending').notNull(),
+
+  priority: integer('priority').default(5).notNull(), // 1 = highest, 10 = lowest
+  attempts: integer('attempts').default(0).notNull(),
+  maxAttempts: integer('max_attempts').default(3).notNull(),
+
+  scheduledFor: timestamp('scheduled_for', { withTimezone: true }).defaultNow().notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('agent_jobs_status_idx').on(table.status, table.priority, table.scheduledFor),
+  index('agent_jobs_user_idx').on(table.userId, table.createdAt),
+])
+
+// ============================================
+// FEATURE GATES — SUBSCRIPTION TIER CONTROL
+// ============================================
+
+export const featureGates = pgTable('feature_gates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  // e.g. 'brain_notes' | 'semantic_search' | 'ruflo_agents' | 'collab' | 'api_access'
+  featureKey: varchar('feature_key', { length: 100 }).notNull().unique(),
+  // 'free' | 'pro' | 'team' | 'enterprise'
+  minimumTier: varchar('minimum_tier', { length: 50 }).notNull(),
+  isEnabled: boolean('is_enabled').default(true).notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+// ============================================
+// SPACED REPETITION / FLASHCARDS
+// ============================================
+
+export const brainFlashcards = pgTable('brain_flashcards', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  noteId: uuid('note_id').references(() => brainNotes.id, { onDelete: 'cascade' }).notNull(),
+
+  front: text('front').notNull(),
+  back: text('back').notNull(),
+
+  // SM-2 spaced repetition fields
+  easinessFactor: integer('easiness_factor').default(250).notNull(), // stored as 250 = 2.50, 130 = 1.30
+  interval: integer('interval').default(1).notNull(),         // days until next review
+  repetitions: integer('repetitions').default(0).notNull(),   // consecutive correct reviews
+  nextReviewAt: timestamp('next_review_at', { withTimezone: true }).defaultNow().notNull(),
+  lastReviewedAt: timestamp('last_reviewed_at', { withTimezone: true }),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('brain_flashcards_user_idx').on(table.userId, table.nextReviewAt),
+  index('brain_flashcards_note_idx').on(table.noteId),
+])
+
+// ============================================
+// NOTE TEMPLATES MARKETPLACE
+// ============================================
+
+export const noteTemplates = pgTable('note_templates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  authorId: uuid('author_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+
+  title: varchar('title', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  description: text('description'),
+  content: text('content').notNull(),
+  tags: text('tags').array().default([]),
+  category: varchar('category', { length: 100 }),
+
+  // Marketplace metadata
+  isPublished: boolean('is_published').default(false).notNull(),
+  installCount: integer('install_count').default(0).notNull(),
+  rating: integer('rating').default(0).notNull(), // 0-500 (500 = 5 stars, stored x100)
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('note_templates_published_idx').on(table.isPublished, table.installCount),
+  index('note_templates_author_idx').on(table.authorId),
+])
+
+// ============================================
+// RSS FEED SUBSCRIPTIONS
+// ============================================
+
+export const rssFeeds = pgTable('rss_feeds', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+
+  feedUrl: text('feed_url').notNull(),
+  title: varchar('title', { length: 255 }),
+  description: text('description'),
+  siteUrl: text('site_url'),
+
+  // Auto-import settings
+  autoImport: boolean('auto_import').default(true).notNull(),
+  importedCount: integer('imported_count').default(0).notNull(),
+  lastFetchedAt: timestamp('last_fetched_at', { withTimezone: true }),
+  lastItemGuid: text('last_item_guid'), // To detect new items
+
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('rss_feeds_user_idx').on(table.userId),
+  uniqueIndex('rss_feeds_user_url_idx').on(table.userId, table.feedUrl),
+])
+
+// ============================================
+// USER SETTINGS (per-user preferences, prompts, defaults)
+// ============================================
+
+export const userSettings = pgTable('user_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull().unique(),
+
+  // Meowdel personality & prompt customization
+  customSystemPrompt: text('custom_system_prompt'),          // Override Meowdel's system prompt
+  meowdelPersonaName: varchar('meowdel_persona_name', { length: 100 }).default('Meowdel'),
+  preferredModel: varchar('preferred_model', { length: 100 }).default('claude-sonnet-4-6'),
+
+  // Brain / agent defaults
+  defaultSwarmMode: varchar('default_swarm_mode', { length: 50 }).default('auto'),
+  autoEmbedNotes: boolean('auto_embed_notes').default(true).notNull(),
+  autoLinkNotes: boolean('auto_link_notes').default(true).notNull(),
+  autoSummarizeNotes: boolean('auto_summarize_notes').default(true).notNull(),
+
+  // UI preferences
+  editorTheme: varchar('editor_theme', { length: 50 }).default('default'),
+  sidebarCollapsed: boolean('sidebar_collapsed').default(false).notNull(),
+  showWordCount: boolean('show_word_count').default(true).notNull(),
+  defaultNoteView: varchar('default_note_view', { length: 20 }).default('edit'), // edit | preview | split
+
+  // Flexible catch-all for future settings (feature flags, experiments, etc.)
+  extra: jsonb('extra').default({}),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('user_settings_user_idx').on(table.userId),
+])
+
+// ============================================
+// CODE GRAPH SCANS (code-review-graph results per user)
+// ============================================
+
+export const codeGraphScans = pgTable('code_graph_scans', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+
+  repoUrl: text('repo_url').notNull(),
+  repoOwner: varchar('repo_owner', { length: 255 }),
+  repoName: varchar('repo_name', { length: 255 }),
+  baseBranch: varchar('base_branch', { length: 255 }).default('main'),
+
+  status: varchar('status', { length: 20 }).default('pending').notNull(), // pending | building | complete | failed
+
+  // Graph stats
+  nodeCount: integer('node_count').default(0),
+  edgeCount: integer('edge_count').default(0),
+  fileCount: integer('file_count').default(0),
+  languagesDetected: jsonb('languages_detected').default([]),
+
+  // Full analysis output (JSON)
+  analysisResult: jsonb('analysis_result'),
+
+  // Architecture overview text (for quick display / brain note body)
+  summaryText: text('summary_text'),
+
+  // Estimated token savings vs brute-force
+  estimatedTokenSavings: integer('estimated_token_savings'),
+
+  errorMessage: text('error_message'),
+
+  // Link to saved brain note (if user chose to save)
+  brainNoteId: uuid('brain_note_id').references(() => brainNotes.id, { onDelete: 'set null' }),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (table) => [
+  index('code_graph_scans_user_idx').on(table.userId),
+  index('code_graph_scans_repo_idx').on(table.repoUrl),
+])
+
+// ============================================
+// INTEGRATIONS (Notion, GitHub, Slack)
+// ============================================
+
+export const integrations = pgTable('integrations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+
+  // 'notion' | 'github' | 'slack' | 'youtube'
+  provider: varchar('provider', { length: 50 }).notNull(),
+
+  // OAuth or API key tokens (encrypt at rest in production)
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
+
+  // Provider-specific config (workspace id, repo, channel, etc.)
+  config: jsonb('config').default({}),
+
+  isActive: boolean('is_active').default(true).notNull(),
+  lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+  syncedCount: integer('synced_count').default(0).notNull(),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('integrations_user_idx').on(table.userId),
+  uniqueIndex('integrations_user_provider_idx').on(table.userId, table.provider),
+])

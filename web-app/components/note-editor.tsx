@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { Save, Loader2, Link as LinkIcon, Sparkles, MessageSquare, Tags, Wand2, History } from 'lucide-react'
+import { Save, Loader2, Sparkles, MessageSquare, Tags, Wand2, History, GitBranch, Map, Zap } from 'lucide-react'
 import { TagManager } from '@/components/tag-manager'
 import { ConnectionSuggester } from '@/components/connection-suggester'
 import { VoiceRecorder } from '@/components/voice-recorder'
+import { TtsPlayer } from '@/components/tts-player'
+import { MindMap } from '@/components/mind-map'
 import { BrainNote } from '@/app/api/brain/notes/route'
 import { InlineAiMenu } from '@/components/inline-ai-menu'
 import { VersionHistory } from '@/components/version-history'
@@ -23,12 +25,13 @@ export interface NoteEditorProps {
   initialTitle: string
   initialTags?: string[]
   slug: string
+  noteId?: string
   onSave?: () => void
   onOpenChat?: () => void
   availableNotes: BrainNote[]
 }
 
-export function NoteEditor({ initialContent, initialTitle, initialTags = [], slug, onSave, onOpenChat, availableNotes = [] }: NoteEditorProps) {
+export function NoteEditor({ initialContent, initialTitle, initialTags = [], slug, noteId, onSave, onOpenChat, availableNotes = [] }: NoteEditorProps) {
   const [content, setContent] = useState(initialContent)
   const [title, setTitle] = useState(initialTitle)
   const [tags, setTags] = useState(initialTags)
@@ -38,6 +41,7 @@ export function NoteEditor({ initialContent, initialTitle, initialTags = [], slu
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [isAutoTagging, setIsAutoTagging] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+  const [showMindMap, setShowMindMap] = useState(false)
 
   // Link Suggestions State
   const [suggestions, setSuggestions] = useState<BrainNote[]>([])
@@ -386,12 +390,23 @@ export function NoteEditor({ initialContent, initialTitle, initialTags = [], slu
               {isSummarizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
               <span className="hidden md:inline">Summarize</span>
             </button>
-            <VoiceRecorder 
+            <VoiceRecorder
               disabled={isSaving}
               onTranscription={(text) => {
                  setContent(prev => prev + (prev.endsWith('\n\n') || prev === '' ? text : `\n\n${text}`))
               }}
             />
+            <TtsPlayer content={content} />
+            {noteId && (
+              <button
+                onClick={() => setShowMindMap(!showMindMap)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors border ${showMindMap ? 'bg-primary text-primary-foreground border-primary' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}
+                title="Mind Map"
+              >
+                <GitBranch className="w-4 h-4" />
+                <span className="hidden md:inline">Mind Map</span>
+              </button>
+            )}
             <button
               onClick={handleSave}
               disabled={isSaving}
@@ -462,16 +477,27 @@ export function NoteEditor({ initialContent, initialTitle, initialTags = [], slu
       
       {showHistory && (
          <div className="absolute right-0 top-16 bottom-0 z-20">
-            <VersionHistory 
+            <VersionHistory
                slug={slug}
                currentContent={content}
                onClose={() => setShowHistory(false)}
                onRestore={(oldContent) => {
                   setContent(oldContent)
-                  // Show unsaved indicator
                   setLastSaved(null)
                }}
             />
+         </div>
+      )}
+
+      {showMindMap && noteId && (
+         <div className="absolute left-0 right-0 bottom-0 z-20 h-72 border-t bg-card/95 backdrop-blur-md shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-2 border-b">
+               <span className="text-sm font-semibold flex items-center gap-2"><GitBranch className="w-4 h-4 text-primary" /> Mind Map</span>
+               <button onClick={() => setShowMindMap(false)} className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-secondary">Close</button>
+            </div>
+            <div className="h-full pb-10">
+               <MindMap noteId={noteId} noteTitle={title} />
+            </div>
          </div>
       )}
     </div>

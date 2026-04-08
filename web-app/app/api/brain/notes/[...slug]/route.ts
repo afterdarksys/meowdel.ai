@@ -1,137 +1,137 @@
-import fs from 'fs/promises'
-import path from 'path'
-import matter from 'gray-matter'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { brainNotes, brainNoteVersions, agentJobs } from '@/lib/db/schema'
+import { eq, and, max, sql } from 'drizzle-orm'
+import { getSession } from '@/lib/auth/session'
 
-function getBrainDir(): string {
-  return path.resolve(process.cwd(), '../brain')
+export const dynamic = 'force-dynamic'
+
+type RouteParams = { params: Promise<{ slug: string[] }> }
+
+export async function GET(_req: NextRequest, { params }: RouteParams) {
+  const user = await getSession()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { slug: slugParts } = await params
+  const slug = slugParts.join('/')
+
+  const [note] = await db
+    .select()
+    .from(brainNotes)
+    .where(and(
+      eq(brainNotes.userId, user.id),
+      eq(brainNotes.slug, slug),
+      eq(brainNotes.isDeleted, false),
+    ))
+    .limit(1)
+
+  if (!note) return NextResponse.json({ error: 'Note not found' }, { status: 404 })
+
+  // Increment view count (fire-and-forget)
+  db.update(brainNotes)
+    .set({ viewCount: sql`${brainNotes.viewCount} + 1` })
+    .where(eq(brainNotes.id, note.id))
+    .catch(console.error)
+
+  return NextResponse.json({
+    id: note.id,
+    slug: note.slug,
+    title: note.title,
+    tags: note.tags,
+    content: note.content,
+    summary: note.summary,
+    frontmatter: note.frontmatter,
+    wordCount: note.wordCount,
+    updatedAt: note.updatedAt,
+    createdAt: note.createdAt,
+  })
 }
 
-function getFilePath(slugParts: string[]): string | null {
-  const brainDir = getBrainDir()
-  const relPath = slugParts.join('/')
+export async function PUT(req: NextRequest, { params }: RouteParams) {
+  const user = await getSession()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // CRITICAL SECURITY: Validate path doesn't contain traversal attempts
-  if (relPath.includes('..') || relPath.includes('\0') || relPath.includes('\x00')) {
-    console.error(`[SECURITY] Path traversal attempt blocked: ${relPath}`)
-    return null
-  }
+  const { slug: slugParts } = await params
+  const slug = slugParts.join('/')
+  const { content, title, tags } = await req.json()
 
-  // Resolve to absolute path
-  const requestedPath = path.resolve(brainDir, `${relPath}.md`)
+  const [existing] = await db
+    .select({ id: brainNotes.id, content: brainNotes.content, title: brainNotes.title, tags: brainNotes.tags })
+    .from(brainNotes)
+    .where(and(
+      eq(brainNotes.userId, user.id),
+      eq(brainNotes.slug, slug),
+      eq(brainNotes.isDeleted, false),
+    ))
+    .limit(1)
 
-  // CRITICAL: Verify the resolved path is within brain directory
-  if (!requestedPath.startsWith(brainDir + path.sep) && requestedPath !== brainDir) {
-    console.error(`[SECURITY] Path outside brain directory blocked: ${relPath} -> ${requestedPath}`)
-    return null
-  }
+  if (!existing) return NextResponse.json({ error: 'Note not found' }, { status: 404 })
 
-  return requestedPath
+  const wordCount = (content ?? existing.content).trim().split(/\s+/).filter(Boolean).length
+
+  // Save version before overwriting
+  const [versionRow] = await db
+    .select({ max: max(brainNoteVersions.versionNumber) })
+    .from(brainNoteVersions)
+    .where(eq(brainNoteVersions.noteId, existing.id))
+
+  const nextVersion = (versionRow?.max ?? 0) + 1
+
+  await db.insert(brainNoteVersions).values({
+    noteId: existing.id,
+    userId: user.id,
+    content: existing.content,
+    title: existing.title,
+    tags: existing.tags ?? [],
+    versionNumber: nextVersion,
+    authorType: 'user',
+    changeSummary: null,
+  })
+
+  await db
+    .update(brainNotes)
+    .set({
+      content: content ?? existing.content,
+      title: title ?? existing.title,
+      tags: tags ?? existing.tags,
+      wordCount,
+      updatedAt: new Date(),
+    })
+    .where(eq(brainNotes.id, existing.id))
+
+  // Queue re-embed + summarize jobs
+  db.insert(agentJobs).values([
+    { userId: user.id, jobType: 'summarize_note', agentName: 'summarizer', payload: { noteId: existing.id }, priority: 5 },
+    { userId: user.id, jobType: 'embed_note', agentName: 'embedder', payload: { noteId: existing.id }, priority: 6 },
+  ]).catch(console.error)
+
+  return NextResponse.json({ success: true })
 }
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ slug: string[] }> }
-) {
-  try {
-    const slugParams = await params
-    const filePath = getFilePath(slugParams.slug)
+export async function DELETE(_req: NextRequest, { params }: RouteParams) {
+  const user = await getSession()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    if (!filePath) {
-      return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
-    }
+  const { slug: slugParts } = await params
+  const slug = slugParts.join('/')
 
-    try {
-      const content = await fs.readFile(filePath, 'utf8')
-      const { data, content: body } = matter(content)
-      const stat = await fs.stat(filePath)
+  const [note] = await db
+    .select({ id: brainNotes.id })
+    .from(brainNotes)
+    .where(and(
+      eq(brainNotes.userId, user.id),
+      eq(brainNotes.slug, slug),
+      eq(brainNotes.isDeleted, false),
+    ))
+    .limit(1)
 
-      return NextResponse.json({
-        slug: slugParams.slug.join('/'),
-        title: data.title || path.basename(filePath, '.md'),
-        tags: data.tags || [],
-        content: body,
-        frontmatter: data,
-        modifiedAt: stat.mtime.toISOString(),
-      })
-    } catch {
-      return NextResponse.json({ error: 'Note not found' }, { status: 404 })
-    }
-  } catch (error) {
-    console.error('Error reading note:', error)
-    return NextResponse.json({ error: 'Failed to read note' }, { status: 500 })
-  }
-}
+  if (!note) return NextResponse.json({ error: 'Note not found' }, { status: 404 })
 
-export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ slug: string[] }> }
-) {
-  try {
-    const slugParams = await params
-    const filePath = getFilePath(slugParams.slug)
+  // Soft delete
+  await db
+    .update(brainNotes)
+    .set({ isDeleted: true, deletedAt: new Date() })
+    .where(eq(brainNotes.id, note.id))
 
-    if (!filePath) {
-      return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
-    }
-
-    const { content, title, tags, frontmatter } = await request.json()
-
-    // We'll read the existing file to preserve unmanaged frontmatter if any,
-    // though for a full overhaul we might just overwrite.
-    let existingFrontmatter: Record<string, any> = {}
-    try {
-      const existingContent = await fs.readFile(filePath, 'utf8')
-      existingFrontmatter = matter(existingContent).data
-    } catch {
-      // It's okay if it doesn't exist, we'll create it.
-      await fs.mkdir(path.dirname(filePath), { recursive: true })
-    }
-
-    const mergedFrontmatter = {
-      ...existingFrontmatter,
-      ...(frontmatter || {}),
-      title: title || existingFrontmatter.title || path.basename(filePath, '.md'),
-      tags: tags || existingFrontmatter.tags || [],
-      modified: new Date().toISOString()
-    }
-
-    const fileContent = matter.stringify(content, mergedFrontmatter)
-    await fs.writeFile(filePath, fileContent, 'utf8')
-
-    // DISABLED: Background AI workers to prevent race conditions
-    // TODO: Re-enable with proper file locking
-    // import('@/lib/workers/brain').then((workers) => {
-    //   workers.processNoteWorkers(filePath, content, mergedFrontmatter.tags)
-    // }).catch(e => console.error("Worker import failed", e))
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('Error updating note:', error)
-    return NextResponse.json({ error: 'Failed to update note' }, { status: 500 })
-  }
-}
-
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ slug: string[] }> }
-) {
-  try {
-    const slugParams = await params
-    const filePath = getFilePath(slugParams.slug)
-
-    if (!filePath) {
-      return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
-    }
-
-    try {
-      await fs.unlink(filePath)
-      return NextResponse.json({ success: true })
-    } catch {
-      return NextResponse.json({ error: 'Note not found' }, { status: 404 })
-    }
-  } catch (error) {
-    console.error('Error deleting note:', error)
-    return NextResponse.json({ error: 'Failed to delete note' }, { status: 500 })
-  }
+  return NextResponse.json({ success: true })
 }

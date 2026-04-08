@@ -1,0 +1,3 @@
+# Meowdel CLI Requirements
+anthropic>=0.39.0
+rich>=13.7.0

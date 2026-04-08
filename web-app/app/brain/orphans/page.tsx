@@ -65,7 +65,7 @@ export default function OrphansPage() {
                    </div>
                    <h3 className="font-semibold truncate pr-6">{note.title}</h3>
                    <div className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">
-                      {note.excerpt}
+                      {note.summary ?? 'No summary yet'}
                    </div>
                    {note.tags && note.tags.length > 0 && (
                       <div className="flex gap-1 mt-auto pt-2">

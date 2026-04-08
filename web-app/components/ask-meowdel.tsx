@@ -83,7 +83,7 @@ export function AskMeowdel() {
                     {(res.score * 100).toFixed(0)}% Match
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground line-clamp-2">{res.excerpt}</p>
+                <p className="text-xs text-muted-foreground line-clamp-2">{res.summary ?? ""}</p>
               </Link>
             ))}
           </div>

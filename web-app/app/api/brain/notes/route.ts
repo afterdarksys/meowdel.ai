@@ -1,151 +1,115 @@
-import fs from 'fs/promises'
-import path from 'path'
-import matter from 'gray-matter'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { brainNotes } from '@/lib/db/schema'
+import { eq, desc, and } from 'drizzle-orm'
+import { getSession } from '@/lib/auth/session'
 
-// Walk up until we find meowdel.ai root
-function getBrainDir(): string {
-  return path.resolve(process.cwd(), '../brain')
-}
+export const dynamic = 'force-dynamic'
 
+// Returned by the list endpoint (no content for performance)
 export interface BrainNote {
+  id: string
   slug: string
   title: string
   tags: string[]
-  content: string
-  excerpt: string
-  modifiedAt: string
+  summary: string | null
+  wordCount: number
+  updatedAt: Date
 }
 
-async function getFilesRecursively(dir: string): Promise<string[]> {
-  const dirents = await fs.readdir(dir, { withFileTypes: true })
-  const files = await Promise.all(
-    dirents.map(async (dirent) => {
-      const res = path.resolve(dir, dirent.name)
-      if (dirent.name === '.git' || dirent.name === 'node_modules' || dirent.name.startsWith('.')) return []
-      
-      return dirent.isDirectory() ? getFilesRecursively(res) : res
-    })
-  )
-  return Array.prototype.concat(...files)
+// Returned by the individual note GET endpoint (includes full content)
+export interface FullBrainNote extends BrainNote {
+  content: string
+  frontmatter: Record<string, unknown> | null
+  createdAt: Date
 }
 
 export async function GET() {
-  try {
-    const brainDir = getBrainDir()
-    
-    // Ensure dir exists
-    try {
-      await fs.access(brainDir)
-    } catch {
-      await fs.mkdir(brainDir, { recursive: true })
-      return NextResponse.json([])
-    }
+  const user = await getSession()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const files = await getFilesRecursively(brainDir)
-    const mdFiles = files.filter(f => f.endsWith('.md'))
+  const notes = await db
+    .select({
+      id: brainNotes.id,
+      slug: brainNotes.slug,
+      title: brainNotes.title,
+      tags: brainNotes.tags,
+      summary: brainNotes.summary,
+      wordCount: brainNotes.wordCount,
+      updatedAt: brainNotes.updatedAt,
+    })
+    .from(brainNotes)
+    .where(and(
+      eq(brainNotes.userId, user.id),
+      eq(brainNotes.isDeleted, false),
+      eq(brainNotes.isArchived, false),
+    ))
+    .orderBy(desc(brainNotes.updatedAt))
+    .limit(500)
 
-    const notes: BrainNote[] = []
-
-    for (const file of mdFiles) {
-      const content = await fs.readFile(file, 'utf8')
-      const stat = await fs.stat(file)
-      
-      try {
-        const { data, content: body } = matter(content)
-        
-        let relPath = path.relative(brainDir, file)
-        
-        // Exclude root README if we want, but letting everything through for now
-        
-        notes.push({
-          slug: relPath.replace(/\.md$/, ''),
-          title: data.title || path.basename(file, '.md'),
-          tags: data.tags || [],
-          content: body,
-          excerpt: body.substring(0, 150) + (body.length > 150 ? '...' : ''),
-          modifiedAt: stat.mtime.toISOString(),
-        })
-      } catch (e) {
-        console.warn(`Failed to parse frontmatter for ${file}`, e)
-      }
-    }
-
-    // Sort by modified date descending
-    notes.sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
-    return NextResponse.json(notes)
-    
-  } catch (error) {
-    console.error('Error reading brain notes:', error)
-    return NextResponse.json({ error: 'Failed to read brain' }, { status: 500 })
-  }
+  return NextResponse.json(notes)
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const user = await getSession()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { title, slug: requestedSlug, content, tags, template } = await request.json()
+
+  if (!title) {
+    return NextResponse.json({ error: 'Title is required' }, { status: 400 })
+  }
+
+  const slug = requestedSlug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+  const body = content || `\n# ${title}\n`
+  const wordCount = body.trim().split(/\s+/).filter(Boolean).length
+
   try {
-    const brainDir = getBrainDir()
-    const { title, slug: requestedSlug, content, tags, template } = await request.json()
+    const [note] = await db
+      .insert(brainNotes)
+      .values({
+        userId: user.id,
+        slug,
+        title,
+        content: body,
+        tags: tags || [],
+        wordCount,
+        frontmatter: { title, tags: tags || [], created: new Date().toISOString() },
+      })
+      .onConflictDoNothing()
+      .returning({ id: brainNotes.id, slug: brainNotes.slug })
 
-    if (!title) {
-        return NextResponse.json({ error: 'Title is required' }, { status: 400 })
-    }
-
-    // Generate slug from title if not provided
-    const slug = requestedSlug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
-    
-    // Default suffix if collision
-    const filePath = path.join(brainDir, `${slug}.md`)
-    
-    // Check if exists
-    try {
-      await fs.access(filePath)
+    if (!note) {
       return NextResponse.json({ error: 'Note with this slug already exists' }, { status: 409 })
-    } catch {
-      // Good, it doesn't exist
     }
 
-    let finalContent = content || ''
-    let finalTags = tags || []
+    // Queue AI jobs for this note (non-blocking)
+    queueNoteJobs(user.id, note.id, body).catch(console.error)
 
-    // Handle template substitution
-    if (template) {
-      const templatePath = path.join(brainDir, 'templates', `${template}.md`)
-      try {
-        const templateContent = await fs.readFile(templatePath, 'utf8')
-        const { data: templateData, content: templateBody } = matter(templateContent)
-        
-        let processedBody = templateBody
-          .replace(/\{\{\s*title\s*\}\}/g, title)
-          .replace(/\{\{\s*date\s*\}\}/g, new Date().toLocaleDateString())
-          
-        finalContent = processedBody + (finalContent ? `\n\n${finalContent}` : '')
-        
-        if (templateData.tags && Array.isArray(templateData.tags)) {
-           finalTags = [...new Set([...finalTags, ...templateData.tags])]
-        }
-      } catch (err) {
-         console.warn(`Template ${template} not found or failed to load.`, err)
-      }
-    }
-
-    if (!finalContent.trim()) {
-        finalContent = `\n# ${title}\n`
-    }
-
-    const fileContent = matter.stringify(finalContent, {
-      title,
-      tags: finalTags,
-      created: new Date().toISOString()
-    })
-
-    // Ensure parent dir exists (if slug contains slashes)
-    await fs.mkdir(path.dirname(filePath), { recursive: true })
-    
-    await fs.writeFile(filePath, fileContent, 'utf8')
-
-    return NextResponse.json({ success: true, slug })
+    return NextResponse.json({ success: true, id: note.id, slug: note.slug })
   } catch (error) {
     console.error('Error creating note:', error)
     return NextResponse.json({ error: 'Failed to create note' }, { status: 500 })
   }
+}
+
+// Queue background AI jobs (summarize + embed) after note creation
+async function queueNoteJobs(userId: string, noteId: string, content: string) {
+  const { agentJobs } = await import('@/lib/db/schema')
+  await db.insert(agentJobs).values([
+    {
+      userId,
+      jobType: 'summarize_note',
+      agentName: 'summarizer',
+      payload: { noteId, contentLength: content.length },
+      priority: 5,
+    },
+    {
+      userId,
+      jobType: 'embed_note',
+      agentName: 'embedder',
+      payload: { noteId },
+      priority: 6,
+    },
+  ])
 }

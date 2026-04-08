@@ -1,0 +1,9 @@
+#!/bin/bash
+# Meowdel CLI Wrapper Script
+# This script makes it easy to run meowdel from anywhere
+
+# Get the directory where this script lives
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Run the Python CLI
+exec python3 "$SCRIPT_DIR/meowdel-cli.py" "$@"

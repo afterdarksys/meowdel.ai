@@ -8,6 +8,20 @@
       "when": 1773599701019,
       "tag": "0000_wise_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1775491605788,
+      "tag": "0001_numerous_alice",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1775611686618,
+      "tag": "0002_simple_reaper",
+      "breakpoints": true
     }
   ]
 }

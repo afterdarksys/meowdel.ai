@@ -122,7 +122,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                      </div>
                      <div className="flex flex-col min-w-0">
                         <span className="font-semibold truncate">{note.title}</span>
-                        <span className="text-xs text-muted-foreground truncate">{note.excerpt}</span>
+                        <span className="text-xs text-muted-foreground truncate">{note.summary ?? ""}</span>
                      </div>
                      {index === selectedIndex && (
                         <div className="ml-auto flex items-center shrink-0">

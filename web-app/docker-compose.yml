@@ -1,42 +1,58 @@
-version: '3.8'
-
 services:
-  web:
+  meowdel-web:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://meowdel.ai}
-    ports:
-      - "3001:3000"
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-https://meowdel.ai}
-      - DATABASE_URL=postgresql://meowdel:meowdel_pass@db:5432/meowdel
+      - DATABASE_URL=postgresql://meowdel:meowdel_pass@afterdark-postgres-primary:5432/meowdel
     restart: unless-stopped
-    depends_on:
-      - db
+    networks:
+      - afterdark-db-network
+      - letsgoout_letsgoout-network
+      - meowdel-internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=letsgoout_letsgoout-network"
+      - "traefik.http.routers.meowdel.entrypoints=websecure"
+      - "traefik.http.routers.meowdel.rule=Host(`meowdel.ai`) || Host(`www.meowdel.ai`)"
+      - "traefik.http.routers.meowdel.tls=true"
+      - "traefik.http.routers.meowdel.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.meowdel.service=meowdel-service"
+      - "traefik.http.routers.meowdel.middlewares=meowdel-www"
+      - "traefik.http.services.meowdel-service.loadbalancer.server.port=3000"
+      - "traefik.http.middlewares.meowdel-www.redirectregex.regex=^https://www\\.meowdel\\.ai/(.*)"
+      - "traefik.http.middlewares.meowdel-www.redirectregex.replacement=https://meowdel.ai/$${1}"
 
-  db:
-    image: postgres:15-alpine
+  meowdel-qdrant:
+    image: qdrant/qdrant:latest
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: meowdel
-      POSTGRES_PASSWORD: meowdel_pass
-      POSTGRES_DB: meowdel
-    ports:
-      - "5444:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - qdrant-data:/qdrant/storage
+    networks:
+      - meowdel-internal
 
-  vision-engine:
-    build:
-      context: ../vision-engine
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
+  meowdel-ollama:
+    image: ollama/ollama:latest
     restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - meowdel-internal
+
+networks:
+  afterdark-db-network:
+    external: true
+  letsgoout_letsgoout-network:
+    external: true
+  meowdel-internal:
+    driver: bridge
 
 volumes:
-  pgdata:
+  qdrant-data:
+  ollama-data:

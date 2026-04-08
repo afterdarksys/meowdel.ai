@@ -179,7 +179,7 @@ export default function VisualSearchPage() {
                            </div>
                         </CardHeader>
                         <CardContent className="p-4 pt-2">
-                          <p className="text-sm text-muted-foreground line-clamp-2">{note.excerpt}</p>
+                          <p className="text-sm text-muted-foreground line-clamp-2">{note.summary ?? 'No summary yet'}</p>
                         </CardContent>
                       </Card>
                     </Link>

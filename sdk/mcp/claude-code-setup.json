@@ -1,0 +1,12 @@
+{
+  "_comment": "Add this to ~/.claude/settings.json under mcpServers, or to your project's .mcp.json",
+  "mcpServers": {
+    "meowdel": {
+      "command": "npx",
+      "args": ["-y", "meowdel-mcp"],
+      "env": {
+        "MEOWDEL_API_KEY": "mwdl_YOUR_KEY_HERE"
+      }
+    }
+  }
+}

@@ -1,26 +1,26 @@
-import fs from 'fs/promises'
-import path from 'path'
-import matter from 'gray-matter'
-import { NextResponse } from 'next/server'
+/**
+ * Smart Reminders — AI-extracted TODOs + spaced-repetition revisit suggestions
+ *
+ * GET /api/brain/reminders
+ *
+ * Replaces the old filesystem-based implementation with a proper DB query.
+ * TODOs are extracted from note content using regex (fast).
+ * Revisit suggestions use note updatedAt timestamps with SM-2-inspired intervals.
+ *
+ * Tier: free (basic todos); pro (AI-enhanced prioritization)
+ */
 
-function getBrainDir(): string {
-  return path.resolve(process.cwd(), '../brain')
-}
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { brainNotes } from '@/lib/db/schema'
+import { eq, and, lt, gt, desc } from 'drizzle-orm'
+import { getSession } from '@/lib/auth/session'
 
-async function getFilesRecursively(dir: string): Promise<string[]> {
-  const dirents = await fs.readdir(dir, { withFileTypes: true })
-  const files = await Promise.all(
-    dirents.map(async (dirent) => {
-      const res = path.resolve(dir, dirent.name)
-      if (dirent.name === '.git' || dirent.name === 'node_modules' || dirent.name.startsWith('.')) return []
-      return dirent.isDirectory() ? getFilesRecursively(res) : res
-    })
-  )
-  return Array.prototype.concat(...files)
-}
+export const dynamic = 'force-dynamic'
 
 export interface ReminderTodo {
   id: string
+  noteId: string
   noteSlug: string
   noteTitle: string
   text: string
@@ -28,109 +28,129 @@ export interface ReminderTodo {
 }
 
 export interface ReminderRevisit {
+  noteId: string
   noteSlug: string
   noteTitle: string
-  reason: string // e.g. "You learned this 3 months ago"
+  reason: string
   lastModified: string
+  daysSince: number
 }
 
-export async function GET() {
-  try {
-    const brainDir = getBrainDir()
-    
-    try {
-      await fs.access(brainDir)
-    } catch {
-      return NextResponse.json({ todos: [], revisit: [] })
+const REVISIT_WINDOWS = [
+  { min: 6, max: 8, label: '1 week' },
+  { min: 13, max: 15, label: '2 weeks' },
+  { min: 28, max: 32, label: '1 month' },
+  { min: 55, max: 65, label: '2 months' },
+  { min: 85, max: 95, label: '3 months' },
+  { min: 175, max: 190, label: '6 months' },
+  { min: 355, max: 375, label: '1 year' },
+]
+
+function extractTodos(content: string, noteId: string, noteSlug: string, noteTitle: string): ReminderTodo[] {
+  const todos: ReminderTodo[] = []
+  const lines = content.split('\n')
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim()
+    let text = ''
+    let completed = false
+    let isTodo = false
+
+    if (/^[-*]\s*\[\s*x\s*\]/i.test(trimmed)) {
+      isTodo = true
+      completed = true
+      text = trimmed.replace(/^[-*]\s*\[[xX]\]\s*/, '')
+    } else if (/^[-*]\s*\[\s*\]/.test(trimmed)) {
+      isTodo = true
+      completed = false
+      text = trimmed.replace(/^[-*]\s*\[\s*\]\s*/, '')
+    } else if (/TODO:/i.test(trimmed)) {
+      isTodo = true
+      completed = false
+      text = trimmed.replace(/^.*TODO:\s*/i, '')
+    } else if (/FIXME:/i.test(trimmed)) {
+      isTodo = true
+      completed = false
+      text = trimmed.replace(/^.*FIXME:\s*/i, '')
     }
 
-    const files = await getFilesRecursively(brainDir)
-    const mdFiles = files.filter(f => f.endsWith('.md'))
+    if (isTodo && text.trim()) {
+      todos.push({
+        id: `${noteId}-${index}`,
+        noteId,
+        noteSlug,
+        noteTitle,
+        text: text.slice(0, 200),
+        completed,
+      })
+    }
+  })
 
-    const todos: ReminderTodo[] = []
-    const revisit: ReminderRevisit[] = []
-    
-    const now = new Date()
+  return todos
+}
 
-    for (const file of mdFiles) {
-      const content = await fs.readFile(file, 'utf8')
-      const stat = await fs.stat(file)
-      const mtime = new Date(stat.mtime)
-      
-      try {
-        const { data, content: body } = matter(content)
-        const relPath = path.relative(brainDir, file)
-        const slug = relPath.replace(/\.md$/, '')
-        const title = data.title || path.basename(file, '.md')
+export async function GET(req: NextRequest) {
+  const user = await getSession()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-        // 1. Extract TODOs
-        const lines = body.split('\n')
-        lines.forEach((line, index) => {
-          const trimmed = line.trim()
-          let isTodo = false
-          let text = ''
-          let completed = false
+  const now = new Date()
 
-          if (trimmed.startsWith('- [ ]') || trimmed.startsWith('* [ ]')) {
-            isTodo = true
-            text = trimmed.substring(5).trim()
-            completed = false
-          } else if (trimmed.startsWith('- [x]') || trimmed.startsWith('* [x]') || trimmed.startsWith('- [X]')) {
-            isTodo = true
-            text = trimmed.substring(5).trim()
-            completed = true
-          } else if (trimmed.toUpperCase().includes('TODO:')) {
-            isTodo = true
-            text = trimmed.substring(trimmed.toUpperCase().indexOf('TODO:') + 5).trim()
-            completed = false
-          }
+  // Fetch recent notes (last 200) — lightweight query with content for TODO extraction
+  const notes = await db
+    .select({
+      id: brainNotes.id,
+      slug: brainNotes.slug,
+      title: brainNotes.title,
+      content: brainNotes.content,
+      updatedAt: brainNotes.updatedAt,
+    })
+    .from(brainNotes)
+    .where(and(
+      eq(brainNotes.userId, user.id),
+      eq(brainNotes.isDeleted, false),
+      eq(brainNotes.isArchived, false),
+    ))
+    .orderBy(desc(brainNotes.updatedAt))
+    .limit(200)
 
-          if (isTodo && text) {
-            todos.push({
-              id: `${slug}-${index}`,
-              noteSlug: slug,
-              noteTitle: title,
-              text,
-              completed
-            })
-          }
+  const todos: ReminderTodo[] = []
+  const revisit: ReminderRevisit[] = []
+
+  for (const note of notes) {
+    // Extract TODOs
+    const noteTodos = extractTodos(note.content, note.id, note.slug, note.title)
+    todos.push(...noteTodos)
+
+    // Revisit logic
+    const mtime = new Date(note.updatedAt)
+    const daysSince = Math.floor((now.getTime() - mtime.getTime()) / (1000 * 60 * 60 * 24))
+
+    for (const window of REVISIT_WINDOWS) {
+      if (daysSince >= window.min && daysSince <= window.max) {
+        revisit.push({
+          noteId: note.id,
+          noteSlug: note.slug,
+          noteTitle: note.title,
+          reason: `You last edited this ${window.label} ago`,
+          lastModified: mtime.toISOString(),
+          daysSince,
         })
-
-        // 2. Identify Revisit (Spaced Repetition logic)
-        // Check if modified ~1 month ago (25-35 days), 3 months ago (85-95 days), 1 year ago, etc.
-        const daysAgo = Math.floor((now.getTime() - mtime.getTime()) / (1000 * 60 * 60 * 24))
-        
-        let reason = ''
-        if (daysAgo >= 6 && daysAgo <= 8) {
-          reason = '1 week ago'
-        } else if (daysAgo >= 28 && daysAgo <= 32) {
-          reason = '1 month ago'
-        } else if (daysAgo >= 88 && daysAgo <= 92) {
-          reason = '3 months ago'
-        } else if (daysAgo >= 180 && daysAgo <= 185) {
-          reason = '6 months ago'
-        } else if (daysAgo >= 360 && daysAgo <= 370) {
-          reason = '1 year ago'
-        }
-
-        if (reason) {
-          revisit.push({
-            noteSlug: slug,
-            noteTitle: title,
-            reason: `You learned this ${reason}`,
-            lastModified: mtime.toISOString()
-          })
-        }
-
-      } catch (e) {
-        console.warn(`Failed to parse ${file} for reminders`, e)
+        break
       }
     }
-
-    return NextResponse.json({ todos, revisit })
-    
-  } catch (error) {
-    console.error('Error fetching reminders:', error)
-    return NextResponse.json({ error: 'Failed to fetch reminders' }, { status: 500 })
   }
+
+  // Surface incomplete TODOs first, limit to 50 to keep response lean
+  const incompleteTodos = todos.filter((t) => !t.completed).slice(0, 30)
+  const completedTodos = todos.filter((t) => t.completed).slice(0, 20)
+
+  return NextResponse.json({
+    todos: [...incompleteTodos, ...completedTodos],
+    revisit: revisit.slice(0, 15),
+    stats: {
+      totalTodos: todos.length,
+      incompleteTodos: incompleteTodos.length,
+      revisitCount: revisit.length,
+    },
+  })
 }

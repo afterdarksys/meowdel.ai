@@ -5,10 +5,6 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { SettingsProvider } from "@/lib/settings-context";
 import { GlobalChatProvider } from "@/lib/chat-context";
 
-// Force dynamic rendering - prevent Next.js from prerendering and caching
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],

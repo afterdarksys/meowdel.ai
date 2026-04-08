@@ -38,10 +38,12 @@ export function BrainGraph() {
           })
         })
 
-        // Pass 2: Brute-force link extraction from content (simple regex for [[wikilinks]])
+        // Pass 2: Link extraction from content — skipped if content is not in list payload.
+        // Links are now stored in the brain_links DB table and fetched via /api/brain/graph.
         notes.forEach(sourceNode => {
           const wikiLinkRegex = /\[\[(.*?)\]\]/g;
-          const matches = Array.from(sourceNode.content.matchAll(wikiLinkRegex));
+          const content = (sourceNode as unknown as { content?: string }).content ?? '';
+          const matches = Array.from(content.matchAll(wikiLinkRegex));
           
           matches.forEach(match => {
             const linkText = match[1];
