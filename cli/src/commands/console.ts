@@ -1,162 +1,74 @@
 import blessed from 'blessed'
-import chalk from 'chalk'
-import { chatRequest } from '../api/client'
+import { chatRequest, apiError, loadConfig } from '../api/client'
 
-interface ConsoleOptions {
-  personality: string
-}
+export async function consoleCommand(options: { pet: string }) {
+  const config = loadConfig()
+  const petId = options.pet || config.defaultPet || 'meowdel'
 
-export async function consoleCommand(options: ConsoleOptions) {
-  const screen = blessed.screen({
-    smartCSR: true,
-    title: 'Meowdel Console',
-  })
+  const screen = blessed.screen({ smartCSR: true, title: 'Meowdel Console' })
 
-  // Header
   const header = blessed.box({
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: 3,
-    content: `{center}🐱 Meowdel Console - ${options.personality}{/center}`,
+    top: 0, left: 0, width: '100%', height: 3,
+    content: `{center}🐱 Meowdel Console — ${petId}{/center}`,
     tags: true,
-    style: {
-      fg: 'magenta',
-      bold: true,
-      border: {
-        fg: 'cyan'
-      }
-    },
-    border: {
-      type: 'line'
-    }
+    style: { fg: 'magenta', bold: true, border: { fg: 'cyan' } },
+    border: { type: 'line' },
   })
 
-  // Chat display
   const chatBox = blessed.box({
-    top: 3,
-    left: 0,
-    width: '100%',
-    height: '80%-3',
-    scrollable: true,
-    alwaysScroll: true,
-    scrollbar: {
-      ch: ' ',
-      style: {
-        bg: 'cyan'
-      }
-    },
-    keys: true,
-    vi: true,
-    mouse: true,
-    tags: true,
-    border: {
-      type: 'line'
-    },
-    style: {
-      border: {
-        fg: 'cyan'
-      }
-    }
+    top: 3, left: 0, width: '100%', height: '80%-3',
+    scrollable: true, alwaysScroll: true, keys: true, vi: true, mouse: true, tags: true,
+    scrollbar: { ch: ' ', style: { bg: 'cyan' } },
+    border: { type: 'line' },
+    style: { border: { fg: 'cyan' } },
   })
 
-  // Input box
   const inputBox = blessed.textarea({
-    bottom: 0,
-    left: 0,
-    width: '100%',
-    height: 3,
-    inputOnFocus: true,
-    keys: true,
-    mouse: true,
-    border: {
-      type: 'line'
-    },
-    style: {
-      fg: 'white',
-      border: {
-        fg: 'cyan'
-      },
-      focus: {
-        border: {
-          fg: 'magenta'
-        }
-      }
-    },
-    label: ' Message (Ctrl+S to send, Ctrl+C to exit) '
+    bottom: 0, left: 0, width: '100%', height: 3,
+    inputOnFocus: true, keys: true, mouse: true,
+    border: { type: 'line' },
+    style: { fg: 'white', border: { fg: 'cyan' }, focus: { border: { fg: 'magenta' } } },
+    label: ' Message (Enter to send, Ctrl+C to exit) ',
   })
 
   screen.append(header)
   screen.append(chatBox)
   screen.append(inputBox)
-
   inputBox.focus()
 
-  const conversationHistory: Array<{ role: string; content: string }> = []
+  const history: Array<{ role: string; content: string }> = []
   let chatContent = ''
 
-  function appendMessage(role: string, message: string, color: string = 'white') {
-    const timestamp = new Date().toLocaleTimeString()
-    chatContent += `{${color}-fg}[${timestamp}] ${role}:{/${color}-fg} ${message}\n\n`
+  function append(role: string, message: string, color = 'white') {
+    const ts = new Date().toLocaleTimeString()
+    chatContent += `{${color}-fg}[${ts}] ${role}:{/${color}-fg} ${message}\n\n`
     chatBox.setContent(chatContent)
     chatBox.setScrollPerc(100)
     screen.render()
   }
 
-  appendMessage('System', `Connected to ${options.personality}. Start chatting!`, 'gray')
+  append('System', `Connected to ${petId}. Start chatting!`, 'gray')
 
-  // Send message handler
-  async function sendMessage() {
+  async function send() {
     const message = inputBox.getValue().trim()
     if (!message) return
-
     inputBox.clearValue()
     screen.render()
-
-    appendMessage('You', message, 'blue')
-
+    append('You', message, 'blue')
     try {
-      const response = await chatRequest(message, {
-        personality: options.personality,
-        useBrainContext: false,
-        conversationHistory,
-      })
-
-      if (response.success) {
-        const aiMessage = response.data.message
-        appendMessage(response.data.personality.name, aiMessage, 'magenta')
-
-        conversationHistory.push({ role: 'user', content: message })
-        conversationHistory.push({ role: 'assistant', content: aiMessage })
-
-        if (conversationHistory.length > 20) {
-          conversationHistory.splice(0, 2)
-        }
-      } else {
-        appendMessage('Error', response.error, 'red')
-      }
-    } catch (error: any) {
-      appendMessage('Error', error.response?.data?.error || error.message, 'red')
+      const res = await chatRequest(message, petId, history)
+      append(res.petName, res.message, 'magenta')
+      history.push({ role: 'user', content: message })
+      history.push({ role: 'assistant', content: res.message })
+      if (history.length > 20) history.splice(0, 2)
+    } catch (err) {
+      append('Error', apiError(err), 'red')
     }
-
     inputBox.focus()
   }
 
-  // Keyboard shortcuts
-  inputBox.key(['C-s'], () => {
-    sendMessage()
-  })
-
-  inputBox.key(['enter'], (ch, key) => {
-    // Allow newlines with Shift+Enter
-    if (!key.shift) {
-      sendMessage()
-    }
-  })
-
-  screen.key(['C-c', 'q'], () => {
-    return process.exit(0)
-  })
-
+  inputBox.key(['enter'], (_ch: any, key: any) => { if (!key.shift) send() })
+  inputBox.key(['C-s'], () => send())
+  screen.key(['C-c', 'q'], () => process.exit(0))
   screen.render()
 }

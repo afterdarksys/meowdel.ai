@@ -7,6 +7,10 @@ import { getSession } from '@/lib/auth/session'
 import { route } from '@/lib/intelligence/router'
 import { readCascadeContext, writeCascadeMemory } from '@/lib/intelligence/cascade'
 import { resolveSkills, buildSkillPrompt, escalateTierForSkills } from '@/lib/intelligence/skills'
+import { updateCodingHour } from '@/lib/db/browserid.service'
+import { db } from '@/lib/db'
+import { chatMessages, chatSessions } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -17,6 +21,8 @@ const chatRequestSchema = z.object({
   message: z.string().min(1, 'Message cannot be empty').max(10000, 'Message too long'),
   userId: z.string().optional(),
   apiKey: z.string().optional(),
+  browserID: z.string().optional(),
+  sessionId: z.string().uuid().optional(),
   conversationHistory: z.array(
     z.object({
       role: z.enum(['user', 'assistant']),
@@ -24,6 +30,58 @@ const chatRequestSchema = z.object({
     })
   ).max(50, 'Conversation history too long').optional().default([]),
 })
+
+/** Save user + assistant messages to chat_messages. */
+async function persistChatMessages(opts: {
+  sessionId: string
+  userId: string
+  userMessage: string
+  assistantMessage: string
+  model: string
+  promptTokens: number
+  completionTokens: number
+  catMood: string | null
+  catAction: string | null
+}) {
+  const { sessionId, userId, userMessage, assistantMessage, model, promptTokens, completionTokens, catMood, catAction } = opts
+  await db.insert(chatMessages).values([
+    { sessionId, role: 'user', content: userMessage },
+    {
+      sessionId,
+      role: 'assistant',
+      content: assistantMessage,
+      model,
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+      catMood,
+      catAction,
+    },
+  ])
+  // Keep session message count in sync
+  await db
+    .update(chatSessions)
+    .set({
+      messageCount: db.$count(chatMessages, eq(chatMessages.sessionId, sessionId)),
+      lastMessageAt: new Date(),
+    })
+    .where(eq(chatSessions.id, sessionId))
+}
+
+/** Extract the first *action* from a cat response and map it to a mood. */
+function extractCatMeta(text: string): { catMood: string | null; catAction: string | null } {
+  const match = text.match(/\*([^*]{1,80})\*/)
+  if (!match) return { catMood: null, catAction: null }
+  const action = match[1].toLowerCase()
+  let catMood = 'curious'
+  if (/purr|content|happy/.test(action)) catMood = 'content'
+  else if (/hiss|annoy|grumpy|crabby/.test(action)) catMood = 'annoyed'
+  else if (/paw|bat|play|pinch|bounce/.test(action)) catMood = 'playful'
+  else if (/sleep|nap|yawn|doze/.test(action)) catMood = 'sleepy'
+  else if (/zoom|dash|run|scurry|scuttle/.test(action)) catMood = 'zoomies'
+  else if (/think|ponder|tilt|consider/.test(action)) catMood = 'curious'
+  return { catMood, catAction: match[0] }
+}
 
 // Simple in-memory rate limiting for demonstration/MVP
 const rateLimitMap = new Map<string, { count: number, resetTime: number }>();
@@ -75,7 +133,7 @@ export async function POST(
       )
     }
 
-    const { message, conversationHistory, userId: bodyUserId, apiKey } = validationResult.data
+    const { message, conversationHistory, userId: bodyUserId, apiKey, browserID, sessionId } = validationResult.data
 
     // 3. Authenticate & Rate Limit
     const session = await getSession()
@@ -141,6 +199,27 @@ export async function POST(
         userMessage: cleanMessage,
         assistantResponse: assistantMessage,
         saveToCascade: command.saveToCascade,
+      }).catch(() => {})
+    }
+
+    // 9a. Extract cat mood/action and persist side effects (fire-and-forget)
+    const { catMood, catAction } = extractCatMeta(assistantMessage)
+
+    if (browserID) {
+      updateCodingHour(browserID).catch(() => {})
+    }
+
+    if (session && sessionId) {
+      persistChatMessages({
+        sessionId,
+        userId: session.id,
+        userMessage: cleanMessage,
+        assistantMessage,
+        model: finalModel,
+        promptTokens: response.usage.input_tokens,
+        completionTokens: response.usage.output_tokens,
+        catMood,
+        catAction,
       }).catch(() => {})
     }
 

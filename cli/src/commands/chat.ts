@@ -1,82 +1,59 @@
 import inquirer from 'inquirer'
 import chalk from 'chalk'
 import ora from 'ora'
-import { chatRequest } from '../api/client'
+import { chatRequest, apiError, loadConfig, KNOWN_PETS } from '../api/client'
 
 interface ChatOptions {
-  personality: string
-  brain: boolean
+  pet: string
 }
 
 export async function chatCommand(options: ChatOptions) {
-  console.clear()
-  console.log(chalk.magenta.bold('🐱 Meowdel Chat'))
-  console.log(chalk.gray(`Chatting with: ${options.personality}`))
-  console.log(chalk.gray(`Brain context: ${options.brain ? 'enabled' : 'disabled'}`))
-  console.log(chalk.gray('Type "exit" or "quit" to end the chat\n'))
+  const config = loadConfig()
+  const petId = options.pet || config.defaultPet || 'meowdel'
 
-  const conversationHistory: Array<{ role: string; content: string }> = []
+  console.log(chalk.magenta.bold('\n🐱 Meowdel Chat'))
+  console.log(chalk.gray(`Pet: ${petId}  |  type "exit" to quit\n`))
+
+  const history: Array<{ role: string; content: string }> = []
 
   while (true) {
-    const { message } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'message',
-        message: chalk.blue('You:'),
-        prefix: '',
-      },
-    ])
+    const { message } = await inquirer.prompt([{
+      type: 'input',
+      name: 'message',
+      message: chalk.blue('You:'),
+      prefix: '',
+    }])
 
-    if (!message.trim()) continue
-    if (['exit', 'quit', 'q'].includes(message.toLowerCase())) {
+    const trimmed = message.trim()
+    if (!trimmed) continue
+    if (['exit', 'quit', 'q'].includes(trimmed.toLowerCase())) {
       console.log(chalk.yellow('\n👋 Goodbye!\n'))
       break
     }
 
     const spinner = ora(chalk.gray('Thinking...')).start()
-
     try {
-      const response = await chatRequest(message, {
-        personality: options.personality,
-        useBrainContext: options.brain,
-        conversationHistory,
-      })
-
+      const res = await chatRequest(trimmed, petId, history)
       spinner.stop()
 
-      if (response.success) {
-        const aiMessage = response.data.message
-        console.log(chalk.magenta(`\n${response.data.personality.name}:`), aiMessage)
+      console.log(chalk.magenta(`\n${res.petName}:`), res.message)
 
-        if (response.data.brainContext && response.data.brainContext.length > 0) {
-          console.log(
-            chalk.gray(`\n📚 Used ${response.data.brainContext.length} brain documents`)
-          )
-        }
-
-        console.log(
-          chalk.gray(
-            `\n💭 Tokens: ${response.data.usage.inputTokens}↑ ${response.data.usage.outputTokens}↓\n`
-          )
-        )
-
-        // Update conversation history
-        conversationHistory.push({ role: 'user', content: message })
-        conversationHistory.push({ role: 'assistant', content: aiMessage })
-
-        // Keep only last 20 messages
-        if (conversationHistory.length > 20) {
-          conversationHistory.splice(0, 2)
-        }
-      } else {
-        console.log(chalk.red('Error:'), response.error)
+      const r = res._routing
+      if (r) {
+        const parts: string[] = [`${r.tier} · ${r.model}`]
+        if (r.activeSkills?.length) parts.push(`skills: ${r.activeSkills.join(', ')}`)
+        if (r.cascadeMemoriesUsed) parts.push(`${r.cascadeMemoriesUsed} memories`)
+        console.log(chalk.gray(`  ↳ ${parts.join(' · ')}\n`))
       }
-    } catch (error: any) {
-      spinner.stop()
-      console.error(chalk.red('Error:'), error.response?.data?.error || error.message)
 
-      if (error.response?.status === 401) {
-        console.log(chalk.yellow('\n💡 Tip: Set your API key with: meowdel config YOUR_KEY\n'))
+      history.push({ role: 'user', content: trimmed })
+      history.push({ role: 'assistant', content: res.message })
+      if (history.length > 20) history.splice(0, 2)
+    } catch (err) {
+      spinner.stop()
+      console.error(chalk.red('Error:'), apiError(err))
+      if ((err as any).response?.status === 401) {
+        console.log(chalk.yellow('💡 Run: meowdel config YOUR_API_KEY\n'))
         break
       }
     }

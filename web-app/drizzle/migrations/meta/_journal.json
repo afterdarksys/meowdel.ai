@@ -22,6 +22,20 @@
       "when": 1775611686618,
       "tag": "0002_simple_reaper",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1775641576104,
+      "tag": "0003_icy_viper",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1746403200000,
+      "tag": "0004_alarms",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { brainNotes } from '@/lib/db/schema'
 import { eq, desc, and } from 'drizzle-orm'
 import { getSession } from '@/lib/auth/session'
+import { dispatchWebhooks } from '@/lib/webhooks'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,6 +86,9 @@ export async function POST(request: NextRequest) {
 
     // Queue AI jobs for this note (non-blocking)
     queueNoteJobs(user.id, note.id, body).catch(console.error)
+
+    // Fire outbound webhooks (non-blocking)
+    dispatchWebhooks(user.id, 'note.created', { id: note.id, slug: note.slug, title, tags: tags || [] }).catch(() => {})
 
     return NextResponse.json({ success: true, id: note.id, slug: note.slug })
   } catch (error) {

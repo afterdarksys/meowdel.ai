@@ -813,6 +813,99 @@ export const codeGraphScans = pgTable('code_graph_scans', {
 // INTEGRATIONS (Notion, GitHub, Slack)
 // ============================================
 
+// ============================================
+// OUTBOUND WEBHOOKS (Zapier-style)
+// ============================================
+
+export const outboundWebhooks = pgTable('outbound_webhooks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+
+  name: varchar('name', { length: 255 }).notNull(),
+  url: text('url').notNull(),
+  secret: varchar('secret', { length: 255 }),
+
+  // 'note.created' | 'note.updated' | 'note.deleted' | 'note.published' | 'note.tagged'
+  events: text('events').array().default([]).notNull(),
+
+  isActive: boolean('is_active').default(true).notNull(),
+  lastTriggeredAt: timestamp('last_triggered_at', { withTimezone: true }),
+  lastStatusCode: integer('last_status_code'),
+  failureCount: integer('failure_count').default(0).notNull(),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('outbound_webhooks_user_idx').on(table.userId),
+])
+
+// ============================================
+// REFERRAL PROGRAM
+// ============================================
+
+export const referrals = pgTable('referrals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  referrerId: uuid('referrer_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  referredId: uuid('referred_id').references(() => users.id, { onDelete: 'cascade' }).unique(),
+
+  code: varchar('code', { length: 20 }).unique().notNull(),
+
+  // 'pending' | 'signed_up' | 'converted'
+  status: varchar('status', { length: 50 }).default('pending').notNull(),
+
+  referrerRewardCoins: integer('referrer_reward_coins').default(0).notNull(),
+  referredRewardCoins: integer('referred_reward_coins').default(0).notNull(),
+  rewardPaidAt: timestamp('reward_paid_at', { withTimezone: true }),
+
+  signedUpAt: timestamp('signed_up_at', { withTimezone: true }),
+  convertedAt: timestamp('converted_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('referrals_referrer_idx').on(table.referrerId),
+  index('referrals_code_idx').on(table.code),
+])
+
+// ============================================
+// ALARMS
+// ============================================
+
+export const alarms = pgTable('alarms', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+
+  label: varchar('label', { length: 255 }).notNull().default('Alarm'),
+  hour: integer('hour').notNull(),     // 0–23 in user's timezone
+  minute: integer('minute').notNull(), // 0–59 in user's timezone
+  timezone: varchar('timezone', { length: 100 }).notNull().default('UTC'),
+
+  isEnabled: boolean('is_enabled').notNull().default(true),
+
+  // Repeat options
+  repeatEnabled: boolean('repeat_enabled').notNull().default(false),
+  // 'none' | 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'custom'
+  repeatFrequency: varchar('repeat_frequency', { length: 20 }).notNull().default('none'),
+  // day-of-week array (0=Sun … 6=Sat) — used by 'weekly' and 'custom'
+  repeatDays: integer('repeat_days').array().default([]),
+
+  // Which cat wakes you up (null → use user's selectedPetId)
+  petId: varchar('pet_id', { length: 100 }),
+
+  // Scheduling state
+  nextFireAt: timestamp('next_fire_at', { withTimezone: true }),
+  lastFiredAt: timestamp('last_fired_at', { withTimezone: true }),
+  snoozeUntil: timestamp('snooze_until', { withTimezone: true }),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('alarms_user_id_idx').on(table.userId),
+  index('alarms_next_fire_idx').on(table.nextFireAt),
+])
+
+// ============================================
+// INTEGRATIONS (Notion, GitHub, RSS, Gmail, Calendar)
+// ============================================
+
 export const integrations = pgTable('integrations', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),

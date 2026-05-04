@@ -4,7 +4,7 @@ import { Brain, Sparkles, Network, GraduationCap, Upload, Zap, GitBranch, Image,
 import { BrainGraph } from '@/components/brain-graph'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const QUICK_ACTIONS = [
   { icon: Sparkles, label: 'New Note', color: 'text-purple-400', bg: 'bg-purple-500/10', href: null, action: 'new' },
@@ -17,9 +17,39 @@ const QUICK_ACTIONS = [
   { icon: BarChart2, label: 'Analytics', color: 'text-indigo-400', bg: 'bg-indigo-500/10', href: '/brain/analytics', action: null },
 ]
 
+interface StreakData {
+  streak: number
+  activeDays: number
+  totalActivity: number
+}
+
 export default function BrainHome() {
   const router = useRouter()
   const [creating, setCreating] = useState(false)
+  const [streakData, setStreakData] = useState<StreakData | null>(null)
+
+  useEffect(() => {
+    fetch(`/api/brain/heatmap?year=${new Date().getFullYear()}`)
+      .then(r => r.json())
+      .then(data => {
+        // Calculate current streak from heatmap days
+        const days: Array<{ date: string; count: number }> = data.days || []
+        const today = new Date().toISOString().slice(0, 10)
+        let streak = 0
+        const sorted = [...days].sort((a, b) => b.date.localeCompare(a.date))
+        for (const day of sorted) {
+          if (day.date > today) continue
+          if (day.count > 0) streak++
+          else break
+        }
+        setStreakData({
+          streak,
+          activeDays: data.activeDays || 0,
+          totalActivity: data.totalActivity || 0,
+        })
+      })
+      .catch(() => {})
+  }, [])
 
   const handleNewNote = async () => {
     setCreating(true)
@@ -54,9 +84,32 @@ export default function BrainHome() {
           <h1 className="text-3xl font-bold text-center mb-2 tracking-tight drop-shadow-xl text-white">
             Meowdel&apos;s 10x Brain
           </h1>
-          <p className="text-white/70 text-center mb-10 text-sm max-w-lg mx-auto drop-shadow">
+          <p className="text-white/70 text-center mb-6 text-sm max-w-lg mx-auto drop-shadow">
             Obsidian-style knowledge graph with AI superpowers — multi-agent, semantic search, real-time collaboration.
           </p>
+
+          {/* Streak Bar */}
+          {streakData && (
+            <div className="flex justify-center gap-4 mb-8 pointer-events-auto">
+              <div className="flex items-center gap-3 bg-black/50 border border-white/10 backdrop-blur-md rounded-2xl px-5 py-2.5">
+                <span className="text-xl">{streakData.streak >= 7 ? '🔥' : '✍️'}</span>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-orange-400 leading-none">{streakData.streak}</p>
+                  <p className="text-[10px] text-white/50 uppercase tracking-wider">day streak</p>
+                </div>
+                <div className="w-px h-8 bg-white/10" />
+                <div className="text-center">
+                  <p className="text-lg font-bold text-purple-400 leading-none">{streakData.activeDays}</p>
+                  <p className="text-[10px] text-white/50 uppercase tracking-wider">active days</p>
+                </div>
+                <div className="w-px h-8 bg-white/10" />
+                <div className="text-center">
+                  <p className="text-lg font-bold text-pink-400 leading-none">{streakData.totalActivity}</p>
+                  <p className="text-[10px] text-white/50 uppercase tracking-wider">total edits</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pointer-events-auto">
             {QUICK_ACTIONS.map((item) => {

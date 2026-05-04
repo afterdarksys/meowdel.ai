@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import {
   Link2, BookOpen, Github, Rss, CheckCircle2, AlertCircle,
-  Loader2, Trash2, RefreshCw, Plus, ExternalLink, Zap
+  Loader2, Trash2, RefreshCw, Plus, ExternalLink, Zap, Mail, Calendar
 } from 'lucide-react'
 
 interface Integration {
@@ -388,6 +388,38 @@ export default function IntegrationsPage() {
           feeds={rssFeeds}
           onAdd={handleAddFeed}
           onDelete={handleDeleteFeed}
+        />
+
+        <IntegrationCard
+          title="Gmail"
+          description="Auto-clip important emails to Brain. Star an email to save it as a note."
+          icon={<Mail className="w-5 h-5 text-red-400" />}
+          provider="gmail"
+          tier="pro"
+          integration={getIntegration('gmail')}
+          tokenLabel="Google OAuth Token"
+          tokenPlaceholder="Paste your Google OAuth access token"
+          extraFields={[{ key: 'labelFilter', label: 'Label filter (optional)', placeholder: 'e.g. starred, important' }]}
+          docsUrl="https://console.cloud.google.com/apis/credentials"
+          onSave={handleSave}
+          onDelete={handleDelete}
+          onSync={handleSync}
+        />
+
+        <IntegrationCard
+          title="Google Calendar"
+          description="Create notes from calendar events. Meeting prep, action items, and recaps."
+          icon={<Calendar className="w-5 h-5 text-blue-400" />}
+          provider="google_calendar"
+          tier="pro"
+          integration={getIntegration('google_calendar')}
+          tokenLabel="Google OAuth Token"
+          tokenPlaceholder="Paste your Google OAuth access token"
+          extraFields={[{ key: 'calendarId', label: 'Calendar ID (optional)', placeholder: 'primary or your-email@gmail.com' }]}
+          docsUrl="https://console.cloud.google.com/apis/credentials"
+          onSave={handleSave}
+          onDelete={handleDelete}
+          onSync={handleSync}
         />
 
         <div className="bg-muted/30 border rounded-xl p-5 text-sm text-muted-foreground">

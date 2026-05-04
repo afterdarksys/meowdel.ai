@@ -25,6 +25,18 @@ export async function GET(request: NextRequest) {
       path: '/',
     })
 
+    // Persist referral code across the OAuth redirect if present
+    const refCode = request.nextUrl.searchParams.get('ref')
+    if (refCode) {
+      response.cookies.set('referral_code', refCode.toUpperCase(), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 600,
+        path: '/',
+      })
+    }
+
     console.log('[OAuth2] Redirecting to SSO login')
 
     return response

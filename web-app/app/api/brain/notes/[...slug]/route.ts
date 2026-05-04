@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { brainNotes, brainNoteVersions, agentJobs } from '@/lib/db/schema'
 import { eq, and, max, sql } from 'drizzle-orm'
 import { getSession } from '@/lib/auth/session'
+import { dispatchWebhooks } from '@/lib/webhooks'
 
 export const dynamic = 'force-dynamic'
 
@@ -104,6 +105,11 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     { userId: user.id, jobType: 'summarize_note', agentName: 'summarizer', payload: { noteId: existing.id }, priority: 5 },
     { userId: user.id, jobType: 'embed_note', agentName: 'embedder', payload: { noteId: existing.id }, priority: 6 },
   ]).catch(console.error)
+
+  // Fire outbound webhooks (non-blocking)
+  const updatedTitle = title ?? existing.title
+  const updatedTags = tags ?? existing.tags
+  dispatchWebhooks(user.id, 'note.updated', { id: existing.id, slug, title: updatedTitle, tags: updatedTags }).catch(() => {})
 
   return NextResponse.json({ success: true })
 }

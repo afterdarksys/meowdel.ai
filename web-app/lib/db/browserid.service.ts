@@ -27,6 +27,7 @@ const DEFAULT_CAT_PERSONALITY: CatPersonalityProfile = {
   questionsAsked: 0,
   codeReviewsCompleted: 0,
   favoriteEmoji: '',
+  selectedPetId: 'meowdel',
 };
 
 /**
@@ -258,6 +259,30 @@ export async function getBrowserIDUser(browserID: string) {
   const user = await db.select().from(browseridUsers).where(eq(browseridUsers.browserID, browserID)).limit(1);
 
   return user.length > 0 ? user[0] : null;
+}
+
+/**
+ * Increment the coding-hours heatmap slot for the current UTC hour.
+ * Fire-and-forget safe — catches its own errors.
+ */
+export async function updateCodingHour(browserID: string): Promise<void> {
+  const hour = new Date().getUTCHours()
+  const user = await db
+    .select({ catPersonality: browseridUsers.catPersonality })
+    .from(browseridUsers)
+    .where(eq(browseridUsers.browserID, browserID))
+    .limit(1)
+
+  if (user.length === 0) return
+
+  const personality = user[0].catPersonality as CatPersonalityProfile
+  const hours = [...(personality.codingHours ?? Array(24).fill(0))]
+  hours[hour] = (hours[hour] ?? 0) + 1
+
+  await db
+    .update(browseridUsers)
+    .set({ catPersonality: { ...personality, codingHours: hours }, updatedAt: new Date() })
+    .where(eq(browseridUsers.browserID, browserID))
 }
 
 /**

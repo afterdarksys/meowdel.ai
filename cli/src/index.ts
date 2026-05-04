@@ -2,11 +2,6 @@
 
 import { Command } from 'commander'
 import chalk from 'chalk'
-import { chatCommand } from './commands/chat'
-import { consoleCommand } from './commands/console'
-import { askCommand } from './commands/ask'
-import { brainCommand } from './commands/brain'
-import { configCommand } from './commands/config'
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -15,49 +10,172 @@ const program = new Command()
 
 program
   .name('meowdel')
-  .description(chalk.magenta('🐱 Meowdel AI - Chat with your AI cat personalities'))
-  .version('1.0.0')
+  .description(chalk.magenta('🐱 Meowdel AI — Chat with your AI cat from the terminal'))
+  .version('2.0.0')
 
+// ── chat ──────────────────────────────────────────────────────────────────────
 program
   .command('chat')
-  .description('Start an interactive chat session')
-  .option('-p, --personality <name>', 'Choose personality (mittens, luna, etc.)', 'mittens')
-  .option('-b, --brain', 'Enable brain context', false)
-  .action(chatCommand)
+  .description('Interactive chat session')
+  .option('-p, --pet <id>', 'Pet personality to use', 'meowdel')
+  .action(async (opts) => {
+    const { chatCommand } = await import('./commands/chat')
+    await chatCommand(opts)
+  })
 
+// ── console ───────────────────────────────────────────────────────────────────
 program
   .command('console')
-  .description('Launch interactive console with rich UI')
-  .option('-p, --personality <name>', 'Choose personality', 'mittens')
-  .action(consoleCommand)
+  .description('Full-screen TUI chat')
+  .option('-p, --pet <id>', 'Pet personality to use', 'meowdel')
+  .action(async (opts) => {
+    const { consoleCommand } = await import('./commands/console')
+    await consoleCommand(opts)
+  })
 
+// ── ask ───────────────────────────────────────────────────────────────────────
 program
   .command('ask <question>')
-  .description('Ask a one-off question')
-  .option('-p, --personality <name>', 'Choose personality', 'mittens')
-  .option('-b, --brain', 'Enable brain context', false)
-  .option('-j, --json', 'Output as JSON', false)
-  .action(askCommand)
+  .description('Ask a one-shot question')
+  .option('-p, --pet <id>', 'Pet personality to use', 'meowdel')
+  .option('-j, --json', 'Output raw JSON', false)
+  .action(async (question, opts) => {
+    const { askCommand } = await import('./commands/ask')
+    await askCommand(question, opts)
+  })
 
-program
-  .command('brain')
-  .description('Brain knowledge operations')
-  .argument('<action>', 'Action: search, list, graph')
-  .argument('[query]', 'Query for search')
-  .action(brainCommand)
+// ── notes ─────────────────────────────────────────────────────────────────────
+const notes = program.command('notes').description('Brain knowledge management')
 
-program
-  .command('config')
-  .description('Configure API key and settings')
-  .argument('[key]', 'API key to set')
-  .action(configCommand)
+notes
+  .command('list')
+  .description('List notes')
+  .option('-t, --tag <tag>', 'Filter by tag')
+  .option('-s, --search <query>', 'Filter by title/summary/tag')
+  .action(async (opts) => {
+    const { notesListCommand } = await import('./commands/notes')
+    await notesListCommand(opts)
+  })
 
+notes
+  .command('view <slug>')
+  .description('View a note')
+  .action(async (slug) => {
+    const { notesViewCommand } = await import('./commands/notes')
+    await notesViewCommand(slug)
+  })
+
+notes
+  .command('new [title]')
+  .description('Create a note (opens $EDITOR)')
+  .action(async (title) => {
+    const { notesNewCommand } = await import('./commands/notes')
+    await notesNewCommand(title)
+  })
+
+notes
+  .command('edit <slug>')
+  .description('Edit a note in $EDITOR')
+  .action(async (slug) => {
+    const { notesEditCommand } = await import('./commands/notes')
+    await notesEditCommand(slug)
+  })
+
+notes
+  .command('delete <slug>')
+  .alias('rm')
+  .description('Delete a note')
+  .action(async (slug) => {
+    const { notesDeleteCommand } = await import('./commands/notes')
+    await notesDeleteCommand(slug)
+  })
+
+notes
+  .command('search <query>')
+  .description('Semantic search')
+  .action(async (query) => {
+    const { notesSearchCommand } = await import('./commands/notes')
+    await notesSearchCommand(query)
+  })
+
+notes
+  .command('tags')
+  .description('List all tags with counts')
+  .action(async () => {
+    const { notesTagsCommand } = await import('./commands/notes')
+    await notesTagsCommand()
+  })
+
+// ── alarms ────────────────────────────────────────────────────────────────────
+const alarms = program.command('alarms').description('Alarm clock management (max 5)')
+
+alarms
+  .command('list')
+  .description('List alarms')
+  .action(async () => {
+    const { alarmsListCommand } = await import('./commands/alarms')
+    await alarmsListCommand()
+  })
+
+alarms
+  .command('add')
+  .description('Create a new alarm (interactive)')
+  .action(async () => {
+    const { alarmsAddCommand } = await import('./commands/alarms')
+    await alarmsAddCommand()
+  })
+
+alarms
+  .command('edit <id>')
+  .description('Edit an alarm')
+  .action(async (id) => {
+    const { alarmsEditCommand } = await import('./commands/alarms')
+    await alarmsEditCommand(id)
+  })
+
+alarms
+  .command('toggle <id>')
+  .description('Enable/disable an alarm')
+  .action(async (id) => {
+    const { alarmsToggleCommand } = await import('./commands/alarms')
+    await alarmsToggleCommand(id)
+  })
+
+alarms
+  .command('delete <id>')
+  .alias('rm')
+  .description('Delete an alarm')
+  .action(async (id) => {
+    const { alarmsDeleteCommand } = await import('./commands/alarms')
+    await alarmsDeleteCommand(id)
+  })
+
+alarms
+  .command('check')
+  .description('Check for alarms due now')
+  .action(async () => {
+    const { alarmsCheckCommand } = await import('./commands/alarms')
+    await alarmsCheckCommand()
+  })
+
+// ── pets ──────────────────────────────────────────────────────────────────────
 program
-  .command('personalities')
-  .description('List available AI personalities')
+  .command('pets')
+  .description('List available pet personalities')
   .action(async () => {
     const { listPersonalities } = await import('./commands/personalities')
     await listPersonalities()
+  })
+
+// ── config ────────────────────────────────────────────────────────────────────
+program
+  .command('config [apiKey]')
+  .description('Configure API key and settings')
+  .option('--url <url>', 'Override API base URL')
+  .option('--pet <id>', 'Set default pet personality')
+  .action(async (apiKey, opts) => {
+    const { configCommand } = await import('./commands/config')
+    await configCommand(apiKey, opts)
   })
 
 program.parse(process.argv)

@@ -1,54 +1,39 @@
 import chalk from 'chalk'
 import ora from 'ora'
-import { chatRequest } from '../api/client'
+import { chatRequest, apiError, loadConfig } from '../api/client'
 
 interface AskOptions {
-  personality: string
-  brain: boolean
+  pet: string
   json: boolean
 }
 
 export async function askCommand(question: string, options: AskOptions) {
+  const config = loadConfig()
+  const petId = options.pet || config.defaultPet || 'meowdel'
+
   const spinner = ora(chalk.gray('Thinking...')).start()
-
   try {
-    const response = await chatRequest(question, {
-      personality: options.personality,
-      useBrainContext: options.brain,
-    })
-
+    const res = await chatRequest(question, petId)
     spinner.stop()
 
     if (options.json) {
-      console.log(JSON.stringify(response, null, 2))
+      console.log(JSON.stringify(res, null, 2))
       return
     }
 
-    if (response.success) {
-      console.log(chalk.magenta(`\n${response.data.personality.name}:`))
-      console.log(response.data.message)
+    console.log(chalk.magenta(`\n${res.petName}:`))
+    console.log(res.message)
 
-      if (response.data.brainContext && response.data.brainContext.length > 0) {
-        console.log(chalk.gray(`\n📚 Used ${response.data.brainContext.length} brain documents`))
-      }
-
-      console.log(
-        chalk.gray(
-          `\n💭 Tokens: ${response.data.usage.inputTokens}↑ ${response.data.usage.outputTokens}↓\n`
-        )
-      )
-    } else {
-      console.error(chalk.red('Error:'), response.error)
-      process.exit(1)
+    const r = res._routing
+    if (r) {
+      console.log(chalk.gray(`\n↳ ${r.tier} · ${r.model}${r.reason ? ' · ' + r.reason : ''}\n`))
     }
-  } catch (error: any) {
+  } catch (err) {
     spinner.stop()
-    console.error(chalk.red('Error:'), error.response?.data?.error || error.message)
-
-    if (error.response?.status === 401) {
-      console.log(chalk.yellow('\n💡 Tip: Set your API key with: meowdel config YOUR_KEY\n'))
+    console.error(chalk.red('Error:'), apiError(err))
+    if ((err as any).response?.status === 401) {
+      console.log(chalk.yellow('💡 Run: meowdel config YOUR_API_KEY'))
     }
-
     process.exit(1)
   }
 }

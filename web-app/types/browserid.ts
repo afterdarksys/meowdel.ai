@@ -54,6 +54,9 @@ export interface CatPersonalityProfile {
   // Custom traits
   favoriteEmoji: string;
   customGreeting?: string;
+
+  // Selected pet character
+  selectedPetId: string;  // e.g. 'meowdel', 'lobstercat', 'bandit'
 }
 
 export interface ConversationMessage {

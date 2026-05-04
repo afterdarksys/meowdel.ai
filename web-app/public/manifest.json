@@ -1,0 +1,20 @@
+{
+  "name": "Meowdel - AI Brain",
+  "short_name": "Meowdel",
+  "description": "Your 10x AI Knowledge Companion",
+  "start_url": "/brain",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#a855f7",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable any" }
+  ],
+  "categories": ["productivity", "utilities", "education"],
+  "shortcuts": [
+    { "name": "New Note", "url": "/brain/notes?new=1", "description": "Create a new note" },
+    { "name": "Search Brain", "url": "/brain?search=1", "description": "Search your notes" },
+    { "name": "Chat", "url": "/chat", "description": "Chat with AI" }
+  ]
+}

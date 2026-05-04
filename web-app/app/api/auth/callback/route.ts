@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { oauth2Client } from '@/lib/auth/oauth2'
 import { applyEmployeeBenefits, isAfterDarkEmployee } from '@/lib/auth/employee-detection'
 import { linkBrowserIDToOAuth, getBrowserIDUser } from '@/lib/db/browserid.service'
+import { db } from '@/lib/db'
+import { referrals, userProfiles, users } from '@/lib/db/schema'
+import { eq, and, sql } from 'drizzle-orm'
 
 // Force dynamic rendering to avoid build-time OAuth2 config requirement
 export const dynamic = 'force-dynamic'
@@ -95,6 +98,51 @@ export async function GET(request: NextRequest) {
     // Get updated user
     const user = await getBrowserIDUser(browserIDCookie)
 
+    // Process referral code if present (only for brand-new users, i.e. created in last 60s)
+    const refCode = request.cookies.get('referral_code')?.value
+    let isNewUser = false
+    if (refCode && user?.userId) {
+      const [dbUser] = await db.select({ createdAt: users.createdAt }).from(users).where(eq(users.id, user.userId)).limit(1)
+      isNewUser = !!dbUser && (Date.now() - new Date(dbUser.createdAt).getTime()) < 60_000
+    }
+    if (refCode && user?.userId && isNewUser) {
+      try {
+        const [referral] = await db
+          .select()
+          .from(referrals)
+          .where(and(eq(referrals.code, refCode), eq(referrals.status, 'pending')))
+          .limit(1)
+
+        if (referral && referral.referrerId !== user.userId) {
+          await db
+            .update(referrals)
+            .set({
+              referredId: user.userId,
+              status: 'signed_up',
+              signedUpAt: new Date(),
+              referrerRewardCoins: 100,
+              referredRewardCoins: 100,
+            })
+            .where(eq(referrals.id, referral.id))
+
+          // Credit Meowcoins to both users
+          await db
+            .update(userProfiles)
+            .set({ meowcoinsEarned: sql`${userProfiles.meowcoinsEarned} + 100` })
+            .where(eq(userProfiles.userId, referral.referrerId))
+            .catch(() => {})
+
+          await db
+            .update(userProfiles)
+            .set({ meowcoinsEarned: sql`${userProfiles.meowcoinsEarned} + 100` })
+            .where(eq(userProfiles.userId, user.userId))
+            .catch(() => {})
+        }
+      } catch {
+        // Referral errors are non-fatal
+      }
+    }
+
     console.log('[OAuth2] OAuth account linked successfully')
 
     if ('subscriptionTier' in enhancedUserInfo) {
@@ -108,8 +156,9 @@ export async function GET(request: NextRequest) {
     // Redirect back to homepage with success
     const response = NextResponse.redirect(new URL('/?login=success', request.url))
 
-    // Clear OAuth state cookie
+    // Clear OAuth state and referral cookies
     response.cookies.delete('oauth_state')
+    response.cookies.delete('referral_code')
 
     // Set user session cookie
     response.cookies.set('oauth_token', tokenResponse.access_token, {
